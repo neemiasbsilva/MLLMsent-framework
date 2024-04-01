@@ -1,0 +1,4 @@
+Train Accuracy: 0.3732, F1-score: 0.3315
+Validation Accuracy: 0.3481, F1-score: 0.2931
+Train Accuracy: 0.3732, F1-score: 0.3315
+Validation Accuracy: 0.3481, F1-score: 0.2931

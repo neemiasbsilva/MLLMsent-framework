@@ -1,0 +1,9 @@
+experiment_name: "Experiment Using LARGE BERT"
+learning_rate: 1e-5
+batch_size: 8
+epochs: 100
+model_path: "bert-large-uncased"
+max_len: 512
+few_shot_learning: 1
+log_dir: "experiments/experiment2/logs"
+checkpoint_dir: "checkpoints"
