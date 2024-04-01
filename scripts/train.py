@@ -1,0 +1,219 @@
+import argparse
+import os
+import pandas as pd
+import numpy as np
+import torch
+from tqdm import tqdm
+from utils.other_utils import load_config
+from utils.data_loader import data_loader
+from transformers import DistilBertTokenizer, BertTokenizer, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, AutoConfig
+from models.model import DistilBERTModel, BERTFinetuningModel, RoBERTaFinetuningModel
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from torch.optim.lr_scheduler import ExponentialLR
+from sklearn.utils import class_weight
+from transformers import AdamW
+from evaluate import evaluate
+
+# from test import 
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+def load_dataframe(path):
+    return pd.read_csv(path)
+
+
+# def loss_fn(class_weights, outputs, targets):
+#     return torch.nn.CrossEntropyLoss(weight=class_weights,reduction='mean')(outputs, targets)
+
+
+def fit(model, class_weights, epochs, optimizer, train_dl, val_dl, log_dir, checkpoint_dir, name_arch):
+    loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights,reduction='mean')
+    # for param in model.distilbert.parameters():
+    # for param in model.distilbert.parameters():
+    # for param in model.distilbert.parameters():
+        # param.requires_grad = False
+    model.to(device)
+    torch.manual_seed(42)
+    np.random.seed(42)
+    log_file = os.path.join(log_dir, "training_logs.txt")
+    df_metrics = pd.DataFrame([])
+    best_acc = 0
+    stop_train = 0
+    for epoch in tqdm(range(epochs)):
+        ## Training phase
+        model.train()
+        total_loss_train = 0.0
+        preds_train = []
+        targets_train = []
+        for _, data in enumerate(train_dl, 0):
+            ids = data["ids"].to(device)
+            mask = data["mask"].to(device)
+            targets = data["targets"].to(device)
+            token_type_id = data["token_type_id"].to(device)
+            # Zero Gradients for every batch!
+            optimizer.zero_grad()
+            outputs = model(ids, mask, token_type_id)
+            # Compute the loss and its gradients
+            loss = loss_fn(outputs, targets)
+            loss.backward()
+            
+            # Adjust learning weights
+            optimizer.step()
+            # scheduler.step()
+            total_loss_train += loss.item()
+            preds_train.extend(torch.argmax(outputs, axis=1).tolist())
+            targets_train.extend(targets.tolist())
+
+        ## Validation phase
+        model.eval()
+        total_loss_val = 0.0
+        preds_val = []
+        targets_val = []
+        with torch.no_grad():
+            for _, data in enumerate(val_dl, 0):
+                ids = data["ids"].to(device)
+                mask = data["mask"].to(device)
+                targets = data["targets"].to(device)
+                token_type_id = data["token_type_id"].to(device)
+
+                outputs = model(ids, mask, token_type_id)
+                loss_val = loss_fn(outputs, targets)
+                total_loss_val += loss_val.item()
+                preds_val.extend(torch.argmax(outputs, axis=1).tolist())
+                targets_val.extend(targets.tolist())
+
+        
+        ## Calculate metrics
+        accuracy_train = accuracy_score(targets_train, preds_train)
+        f1_train = f1_score(targets_train, preds_train, average="weighted")
+        loss_train = total_loss_train/len(train_dl)
+
+        accuracy_val = accuracy_score(targets_val, preds_val)
+        f1_val = f1_score(targets_val, preds_val, average="weighted")
+        loss_val = total_loss_val/len(val_dl)
+
+        # Write logs to file
+        # print(f"Epoch {epoch+1}/{epochs}:")
+        # print(f"Train Loss: {loss_train:.4f}, Accuracy: {accuracy_train:.4f}, F1-score: {f1_train:.4f}")
+        # print(f"Val Loss: {loss_val:.4f}, Accuracy: {accuracy_val:.4f}, F1-score: {f1_val:.4f}")
+        log_entry = (
+            f"Epoch {epoch+1}/{epochs}: \n"
+            f"Train Loss: {loss_train:.4f}, Accuracy: {accuracy_train:.4f}, "
+            f"F1-score: {f1_train:.4f}\n"
+            f"Validation Loss: {loss_val:.4f}, Accuracy: {accuracy_val:.4f}, "
+            f"F1-score: {f1_val:.4f}\n"
+        )
+        with open(log_file, 'a') as f:
+            f.write(log_entry)
+
+        
+        # if ( stop_train == 10): 
+        #     print("Validation accuracy don't change for 10 epochs, finish training")
+        #     break
+        df_metrics = pd.concat([df_metrics, pd.DataFrame({"epoch": [epoch+1], "train_accuracy": [accuracy_train], "train_f1_score": [f1_train],
+                                                         "val_accuracy": [accuracy_val], "val_f1_score": [f1_val]
+                                                         })], axis=0)
+        df_metrics.to_csv(os.path.join(log_dir, "training_logs.csv"), index=False)
+
+        # scheduler.step()
+        # Save checkpoint
+        if (best_acc < accuracy_val):
+            best_acc = accuracy_val
+            stop_train = 0
+            checkpoint_path = os.path.join(checkpoint_dir, f"best_checkpoint_{name_arch.split('/')[0]}.pt")
+            torch.save(model.state_dict(), checkpoint_path)
+        stop_train += 1
+
+
+def train(config):
+    print(f'Train the experiment: {config["experiment_name"]}')
+
+    # get hyperparameters
+    learning_rate = float(config["learning_rate"])
+    batch_size = config["batch_size"]
+    epochs = config["epochs"]
+    max_len = config["max_len"]
+    model_path = config["model_path"]
+    log_dir = config["log_dir"]
+    checkpoint_dir = config['checkpoint_dir']
+    few_shot_learning = config['few_shot_learning']
+
+    step_size = 1
+    gamma = 0.1
+    name_arch = model_path.split('-')[0]
+
+
+    # load_datasets and preprocessing pytorch dataloader
+    train_df = load_dataframe("data/train/aug_train.csv")
+
+    train_params = {
+        "batch_size": batch_size,
+        "shuffle": True,
+    }
+    val_df = load_dataframe("data/validation/val.csv")
+    val_params = {
+        "batch_size": batch_size,
+        "shuffle": True
+    }
+
+    if (few_shot_learning == 1):
+        # # Define the tokenizer
+        # tokenizer = DistilBertTokenizer.from_pretrained(
+        #     model_path,
+        #     do_lower_case=True
+        # )
+        tokenizer = BertTokenizer.from_pretrained(
+            model_path,
+            # do_lower_case=True
+        )
+        # tokenizer = AutoTokenizer.from_pretrained(model_path)
+        # config = AutoConfig.from_pretrained(model_path)
+
+        train_dl = data_loader(train_df, tokenizer, max_len, train_params)
+        val_dl = data_loader(val_df, tokenizer, max_len, val_params)
+
+        # model = DistilBERTModel(model_path)
+        model = BERTFinetuningModel(model_path)
+        # model = RoBERTaFinetuningModel(model_path)
+        model.to(device)
+        print(model)
+
+        # optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate, weight_decay=0.01)
+        optimizer = torch.optim.AdamW(params=model.parameters(), lr=learning_rate) #weight_decay=1e-6)
+        # optimizer = torch.optim.SGD(params=model.parameters(), lr=learning_rate, momentum=.9)
+        # scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=learning_rate, steps_per_epoch=len(train_dl), epochs=epochs)
+        
+        class_size = train_df.sentiment.value_counts().sort_index().to_list()
+        class_weights = torch.Tensor([1/class_size[0], 1/class_size[1], 1/class_size[2]]).type(torch.float).to(device)
+                                    
+
+        fit(model, class_weights, epochs, optimizer, train_dl, val_dl, log_dir, checkpoint_dir, name_arch)
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        config_model = AutoConfig.from_pretrained(model_path)
+        model = AutoModelForSequenceClassification.from_pretrained(model_path)
+        data = train_df.text
+        target = train_df.sentiment
+        set_name = "Train"
+        evaluate(tokenizer, model, config_model, data, target, log_dir, set_name)
+        data = val_df.text
+        target = val_df.sentiment
+        set_name = "Validation"
+        evaluate(tokenizer, model, config_model, data, target, log_dir, set_name)
+
+
+
+
+if __name__ == "__main__":
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Train the DL model.")
+    parser.add_argument("--config", type=str, default="experiments/experiment1/config.yaml")
+    args = parser.parse_args()
+
+    # Load configuration
+    config_path = args.config
+    config = load_config(config_path)
+
+    train(config)
