@@ -1,4 +1,4 @@
-# Distil-Bert Finetuning Sentiment Analysis
+# PerceptSent: an approach using LLMs to sentiment analysis
 
 ## Project Structure
 
