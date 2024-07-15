@@ -1,0 +1,12 @@
+Epoch 1/100: 
+Train Loss: 0.6314, Accuracy: 0.6859, F1-score: 0.6892
+Validation Loss: 0.4928, Accuracy: 0.8428, F1-score: 0.8421
+Epoch 2/100: 
+Train Loss: 0.3899, Accuracy: 0.8461, F1-score: 0.8470
+Validation Loss: 0.3599, Accuracy: 0.8637, F1-score: 0.8629
+Epoch 3/100: 
+Train Loss: 0.3064, Accuracy: 0.8697, F1-score: 0.8704
+Validation Loss: 0.3192, Accuracy: 0.8658, F1-score: 0.8657
+Epoch 4/100: 
+Train Loss: 0.2636, Accuracy: 0.8976, F1-score: 0.8979
+Validation Loss: 0.3125, Accuracy: 0.8595, F1-score: 0.8601

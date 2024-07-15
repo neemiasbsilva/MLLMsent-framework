@@ -4,18 +4,18 @@ from transformers import BertModel
 from transformers import AutoModelForSequenceClassification
 
 class DistilBERTModel(torch.nn.Module):
-    def __init__(self, bert_path):
+    def __init__(self, bert_path, class_size):
         super().__init__()
         self.distilbert = DistilBertModel.from_pretrained(bert_path)
         
         self.classifier = torch.nn.Sequential(
             torch.nn.Linear(768, 1024),
-            torch.nn.BatchNorm1d(1024),
+            # torch.nn.BatchNorm1d(1024),
+            # torch.nn.ReLU(),
+            # torch.nn.Dropout(0.5),
+            # torch.nn.Linear(1024, 768),
             torch.nn.ReLU(),
-            torch.nn.Dropout(0.5),
-            torch.nn.Linear(1024, 768),
-            torch.nn.ReLU(),
-            torch.nn.Linear(768, 3)
+            torch.nn.Linear(1024, class_size)
         )
     
 
