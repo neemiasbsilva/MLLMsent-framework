@@ -11,6 +11,7 @@ from utils.data_loader import data_loader
 from transformers import DistilBertTokenizer, BertTokenizer, AutoModelForSequenceClassification
 from transformers import AutoTokenizer, AutoConfig
 from models.model import DistilBERTModel, BERTFinetuningModel, RoBERTaFinetuningModel
+from transformers import BartForSequenceClassification, BartTokenizerFast
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from torch.optim.lr_scheduler import ExponentialLR
@@ -30,7 +31,7 @@ def load_dataframe(path):
 # def loss_fn(class_weights, outputs, targets):
 #     return torch.nn.CrossEntropyLoss(weight=class_weights,reduction='mean')(outputs, targets)
 
-def val(log_dir, model, dataloader, loss_fn, kfold, df_metrics):
+def val(log_dir, model, dataloader, loss_fn, kfold, df_metrics, model_name):
     ## Validation phase
     model.eval()
     total_loss = 0.0
@@ -44,6 +45,8 @@ def val(log_dir, model, dataloader, loss_fn, kfold, df_metrics):
             token_type_id = data["token_type_id"].to(device)
 
             outputs = model(ids, mask, token_type_id)
+            if model_name == "bart":
+                outputs = outputs.logits
             loss = loss_fn(outputs, targets_)
             total_loss += loss.item()
             preds.extend(torch.argmax(outputs, axis=1).tolist())
@@ -60,8 +63,8 @@ def val(log_dir, model, dataloader, loss_fn, kfold, df_metrics):
     return df_metrics
 
 
-def fit(model, class_weights, epochs, optimizer, train_dl, val_dl, log_dir, checkpoint_dir, name_arch, fold):
-    loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights,reduction='mean', )
+def fit(model, class_weights, epochs, optimizer, train_dl, val_dl, log_dir, checkpoint_dir, name_arch, fold, model_name):
+    loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights, reduction='mean')
     # for param in model.distilbert.parameters():
     # for param in model.distilbert.parameters():
     # for param in model.distilbert.parameters():
@@ -88,6 +91,10 @@ def fit(model, class_weights, epochs, optimizer, train_dl, val_dl, log_dir, chec
             optimizer.zero_grad()
             outputs = model(ids, mask, token_type_id)
             # Compute the loss and its gradients
+            if model_name == "bart":
+                outputs = outputs.logits
+            # print(outputs.logits)
+            # exit()
             loss = loss_fn(outputs, targets)
             loss.backward()
             
@@ -111,6 +118,8 @@ def fit(model, class_weights, epochs, optimizer, train_dl, val_dl, log_dir, chec
                 token_type_id = data["token_type_id"].to(device)
 
                 outputs = model(ids, mask, token_type_id)
+                if model_name == "bart":
+                    outputs = outputs.logits
                 loss_val = loss_fn(outputs, targets)
                 total_loss_val += loss_val.item()
                 preds_val.extend(torch.argmax(outputs, axis=1).tolist())
@@ -172,7 +181,7 @@ def train(config):
     model_path = config["model_path"]
     log_dir = config["log_dir"]
     checkpoint_dir = config['checkpoint_dir']
-    few_shot_learning = config['few_shot_learning']
+    model_name = config['model_name']
 
     step_size = 1
     gamma = 0.1
@@ -182,7 +191,7 @@ def train(config):
     # load_datasets and preprocessing pytorch dataloader
     ### Load experiments for alpha 3
     # df = load_dataframe("data/percept_dataset_alpha3_p5.csv")
-    # df = load_dataframe("data/percept_dataset_alpha3_p3.csv")
+    df = load_dataframe("data/percept_dataset_alpha3_p3.csv")
     # df = load_dataframe("data/percept_dataset_alpha3_p2plus.csv")
     # df = load_dataframe("data/percept_dataset_alpha3_p2neg.csv")
 
@@ -196,7 +205,7 @@ def train(config):
     # df = load_dataframe("data/percept_dataset_alpha5_p5.csv")
     # df = load_dataframe("data/percept_dataset_alpha5_p3.csv")
     # df = load_dataframe("data/percept_dataset_alpha5_p2plus.csv")
-    df = load_dataframe("data/percept_dataset_alpha5_p2neg.csv")
+    # df = load_dataframe("data/percept_dataset_alpha5_p2neg.csv")
 
     train_val_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
 
@@ -215,7 +224,7 @@ def train(config):
         "shuffle": True
     }
 
-    if (few_shot_learning == 1):
+    if (model_name == "distil-bert"):
         # # Define the tokenizer
         tokenizer = DistilBertTokenizer.from_pretrained(
             model_path,
@@ -262,25 +271,59 @@ def train(config):
 
                                         
 
-            model, loss_fn = fit(model, class_weights, epochs, optimizer, train_dl, val_dl, log_dir, checkpoint_dir, name_arch, fold)
+            model, loss_fn = fit(model, class_weights, epochs, optimizer, train_dl, val_dl, log_dir, checkpoint_dir, name_arch, fold, model_name)
 
-            df_metrics = val(log_dir, model, test_dl, loss_fn, fold, df_metrics)
+            df_metrics = val(log_dir, model, test_dl, loss_fn, fold, df_metrics, model_name)
         
         print(f'Mean F1-score: {np.mean(df_metrics["f1_score"].to_numpy())*100:.2f}%')
     else:
-        tokenizer = AutoTokenizer.from_pretrained(model_path)
-        config_model = AutoConfig.from_pretrained(model_path)
-        model = AutoModelForSequenceClassification.from_pretrained(model_path)
-        data = train_df.text
-        target = train_df.sentiment
-        set_name = "Train"
-        evaluate(tokenizer, model, config_model, data, target, log_dir, set_name)
-        data = val_df.text
-        target = val_df.sentiment
-        set_name = "Validation"
-        evaluate(tokenizer, model, config_model, data, target, log_dir, set_name)
+        # tokenizer = AutoTokenizer.from_pretrained(model_path)
+        tokenizer = BartTokenizerFast.from_pretrained(model_path)
+        # config_model = AutoConfig.from_pretrained(model_path)
+
+        kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+        df_metrics = pd.DataFrame([])
+        for fold, (train_idx, val_idx) in enumerate(kfold.split(train_val_df)):
+            print(f"Fold {fold + 1}")
+            train_df = pd.DataFrame({"text": train_val_df["text"].iloc[train_idx].to_list(), 
+                                     "sentiment": train_val_df["sentiment"].iloc[train_idx].to_list()})
+            val_df = pd.DataFrame({"text": train_val_df["text"].iloc[val_idx].to_list(), 
+                                     "sentiment": train_val_df["sentiment"].iloc[val_idx].to_list()})
+            
+            train_dl = data_loader(train_df, tokenizer, max_len, train_params)
+            val_dl = data_loader(val_df, tokenizer, max_len, val_params)
+            test_dl = data_loader(test_df, tokenizer, max_len, val_params)
+
+            class_size = train_df.sentiment.value_counts().sort_index().to_list()
 
 
+            if (len(class_size) == 3):
+                class_weights = torch.Tensor([1/class_size[0], 1/class_size[1], 1/class_size[2]]).type(torch.float).to(device)
+            elif (len(class_size) == 2):
+                class_weights = torch.Tensor([1/class_size[0], 1/class_size[1]]).type(torch.float).to(device)
+            else:
+                class_weights = torch.Tensor([1/class_size[0], 1/class_size[1], 1/class_size[2], 1/class_size[3], 1/class_size[4]]).type(torch.float).to(device)
+        
+            model = BartForSequenceClassification.from_pretrained('facebook/bart-large-mnli', num_labels=len(class_size), ignore_mismatched_sizes=True)
+            model.to(device)
+            print(model)  
+
+            optimizer = torch.optim.AdamW(params=model.parameters(), lr=learning_rate, weight_decay=1e-6)            
+
+            model, loss_fn = fit(model, class_weights, epochs, optimizer, train_dl, val_dl, log_dir, checkpoint_dir, name_arch, fold, model_name)
+
+            df_metrics = val(log_dir, model, test_dl, loss_fn, fold, df_metrics, model_name)
+        
+        print(f'Mean F1-score: {np.mean(df_metrics["f1_score"].to_numpy())*100:.2f}%')
+
+        # data = train_df.text
+        # target = train_df.sentiment
+        # set_name = "Train"
+        # evaluate(tokenizer, model, config_model, data, target, log_dir, set_name)
+        # data = val_df.text
+        # target = val_df.sentiment
+        # set_name = "Validation"
+        # evaluate(tokenizer, model, config_model, data, target, log_dir, set_name)
 
 
 if __name__ == "__main__":

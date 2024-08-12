@@ -4,6 +4,6 @@ batch_size: 8
 epochs: 100
 model_path: "cardiffnlp/twitter-roberta-base-sentiment-latest"
 max_len: 512
-few_shot_learning: 1
+model_name: "distil-bert"
 log_dir: "experiments/experiment4/logs"
 checkpoint_dir: "checkpoints"
