@@ -196,8 +196,8 @@ def train(config):
     # df = load_dataframe("data/percept_dataset_alpha3_p2neg.csv")
 
     ### Load experiments for alpha 4
-    df = load_dataframe("data/percept_dataset_alpha4_p5.csv")
-    # df = load_dataframe("data/percept_dataset_alpha4_p3.csv")
+    # df = load_dataframe("data/percept_dataset_alpha4_p5.csv")
+    df = load_dataframe("data/percept_dataset_alpha4_p3.csv")
     # df = load_dataframe("data/percept_dataset_alpha4_p2plus.csv")
     # df = load_dataframe("data/percept_dataset_alpha4_p2neg.csv")
 
