@@ -19,6 +19,7 @@ from sklearn.utils import class_weight
 from sklearn.model_selection import KFold, train_test_split
 from transformers import AdamW
 from evaluate import evaluate
+import torch.nn.functional as F
 
 # from test import 
 
@@ -61,6 +62,22 @@ def val(log_dir, model, dataloader, loss_fn, kfold, df_metrics, model_name):
     df_metrics.to_csv(os.path.join(log_dir, f"test_logs.csv"), index=False)
 
     return df_metrics
+
+class ContrastiveLoss(torch.nn.Module):
+    def __init__(self, margin=1.0):
+        super().__init__()
+        self.margin = margin
+
+    def forward(self, output1, output2, label):
+        # Distância euclidiana entre as duas representações
+        euclidean_distance = F.pairwise_distance(output1, output2)
+        
+        # Perda contrativa
+        loss = torch.mean(
+            (1 - label) * torch.pow(euclidean_distance, 2) +
+            label * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2)
+        )
+        return loss
 
 
 def fit(model, class_weights, epochs, optimizer, train_dl, val_dl, log_dir, checkpoint_dir, name_arch, fold, model_name):
@@ -191,6 +208,7 @@ def train(config):
     # load_datasets and preprocessing pytorch dataloader
     ### Load experiments for alpha 3
     # df = load_dataframe("data/percept_dataset_alpha3_p5.csv")
+    df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha3_p5.csv")
     # df = load_dataframe("data/percept_dataset_alpha3_p3.csv")
     # df = load_dataframe("data/percept_dataset_alpha3_p2plus.csv")
     # df = load_dataframe("data/percept_dataset_alpha3_p2neg.csv")
@@ -205,7 +223,7 @@ def train(config):
     # df = load_dataframe("data/percept_dataset_alpha5_p5.csv")
     # df = load_dataframe("data/percept_dataset_alpha5_p3.csv")
     # df = load_dataframe("data/percept_dataset_alpha5_p2plus.csv")
-    df = load_dataframe("data/percept_dataset_alpha5_p2neg.csv")
+    # df = load_dataframe("data/percept_dataset_alpha5_p2neg.csv")
 
     train_val_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
 
