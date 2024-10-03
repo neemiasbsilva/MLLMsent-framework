@@ -167,9 +167,9 @@ def fit(model, class_weights, epochs, optimizer, train_dl, val_dl, log_dir, chec
             f.write(log_entry)
 
         
-        # if ( stop_train == 10): 
-        #     print("Validation accuracy don't change for 10 epochs, finish training")
-        #     break
+        if ( stop_train == 10): 
+            print("Validation accuracy don't change for 10 epochs, finish training")
+            break
         df_metrics = pd.concat([df_metrics, pd.DataFrame({"epoch": [epoch+1], "train_accuracy": [accuracy_train], "train_f1_score": [f1_train],
                                                          "val_accuracy": [accuracy_val], "val_f1_score": [f1_val]
                                                          })], axis=0)
@@ -212,8 +212,9 @@ def train(config):
     # df = load_dataframe("data/percept_dataset_alpha3_p3.csv")
     # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha3_p3.csv")
     # df = load_dataframe("data/percept_dataset_alpha3_p2plus.csv")
-    df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha3_p2plus.csv")
+    # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha3_p2plus.csv")
     # df = load_dataframe("data/percept_dataset_alpha3_p2neg.csv")
+    df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha3_p2neg.csv")
 
     ### Load experiments for alpha 4
     # df = load_dataframe("data/percept_dataset_alpha4_p5.csv")
