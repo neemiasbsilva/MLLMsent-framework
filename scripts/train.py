@@ -208,8 +208,9 @@ def train(config):
     # load_datasets and preprocessing pytorch dataloader
     ### Load experiments for alpha 3
     # df = load_dataframe("data/percept_dataset_alpha3_p5.csv")
-    df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha3_p5.csv")
+    # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha3_p5.csv")
     # df = load_dataframe("data/percept_dataset_alpha3_p3.csv")
+    df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha3_p3.csv")
     # df = load_dataframe("data/percept_dataset_alpha3_p2plus.csv")
     # df = load_dataframe("data/percept_dataset_alpha3_p2neg.csv")
 

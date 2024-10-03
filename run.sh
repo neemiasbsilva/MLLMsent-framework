@@ -10,7 +10,8 @@
 # python scripts/train.py --config experiments/bart-experiment-p3-alpha5/config.yaml # for bart-mnli
 # python scripts/train.py --config experiments/bart-experiment-p2plus-alpha5/config.yaml # for bart-mnli
 # python scripts/train.py --config experiments/bart-experiment-p2neg-alpha5/config.yaml # for bart-mnli
-python scripts/train.py --config experiments/openai-distil-experiment-p5-alpha3/config.yaml # for distil-bert openai
+# python scripts/train.py --config experiments/openai-distil-experiment-p5-alpha3/config.yaml # for distil-bert openai
+python scripts/train.py --config experiments/openai-distil-experiment-p3-alpha3/config.yaml # for distil-bert openai
 # python scripts/train.py --config experiments/experiment1/config.yaml # for distil-bert
 # python scripts/train.py --config experiments/experiment2/config.yaml 
 # python scripts/train.py --config experiments/experiment3/config.yaml
