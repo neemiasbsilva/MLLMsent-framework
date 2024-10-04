@@ -5,5 +5,5 @@ epochs: 100
 model_path: "distilbert-base-uncased"
 model_name: "distil-bert"
 max_len: 512
-log_dir: "experiments/experiment1/logs"
+log_dir: "experiments/distil-experiment-p3-alpha3/logs"
 checkpoint_dir: "checkpoints"
