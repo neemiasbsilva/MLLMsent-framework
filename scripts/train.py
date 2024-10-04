@@ -228,8 +228,9 @@ def train(config):
 
     ### Load experiments for alpha 5
     # df = load_dataframe("data/percept_dataset_alpha5_p5.csv")
-    df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha5_p5.csv")
+    # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha5_p5.csv")
     # df = load_dataframe("data/percept_dataset_alpha5_p3.csv")
+    df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha5_p3.csv")
     # df = load_dataframe("data/percept_dataset_alpha5_p2plus.csv")
     # df = load_dataframe("data/percept_dataset_alpha5_p2neg.csv")
 
