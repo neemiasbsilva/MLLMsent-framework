@@ -233,10 +233,13 @@ def train(config):
     # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha5_p3.csv")
     # df = load_dataframe("data/percept_dataset_alpha5_p2plus.csv")
     # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha5_p2plus.csv")
-    # df = load_dataframe("data/percept_dataset_alpha5_p2neg.csv")
-    df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha5_p2neg.csv")
+    df = load_dataframe("data/percept_dataset_alpha5_p2neg.csv")
+    # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha5_p2neg.csv")
 
     train_val_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
+    train_val_df = df.copy()
+
+
 
     test_df = pd.DataFrame({"text": test_df.text.to_list(), "sentiment": test_df.sentiment.to_list()})
     
@@ -302,7 +305,8 @@ def train(config):
 
             model, loss_fn = fit(model, class_weights, epochs, optimizer, train_dl, val_dl, log_dir, checkpoint_dir, name_arch, fold, model_name)
 
-            df_metrics = val(log_dir, model, test_dl, loss_fn, fold, df_metrics, model_name)
+            # df_metrics = val(log_dir, model, test_dl, loss_fn, fold, df_metrics, model_name)
+            df_metrics = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name)
         
         print(f'Mean F1-score: {np.mean(df_metrics["f1_score"].to_numpy())*100:.2f}%')
     else:
