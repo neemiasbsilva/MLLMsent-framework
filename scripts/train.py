@@ -1,229 +1,173 @@
 import argparse
 import os
 import sys
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import torch
 import pandas as pd
 import numpy as np
-import torch
+import warnings
 from tqdm import tqdm
+from scipy import stats
+from transformers import pipeline, DistilBertTokenizer, AutoTokenizer, TrainingArguments
+from transformers import AutoModelForSequenceClassification, AutoConfig
 from utils.other_utils import load_config
 from utils.data_loader import data_loader
-from transformers import (
-    DistilBertTokenizer,
-    BertTokenizer,
-    AutoModelForSequenceClassification,
+from scripts.utils_dl import (
+    load_experiment_data, train_one_epoch, validate_one_epoch, compute_metrics,
+    save_checkpoint, log_metrics, compute_val_loss_and_preds, compute_val_metrics,
+    update_metrics_df, save_metrics_to_csv
 )
-from transformers import AutoTokenizer, AutoConfig
-from models.model import DistilBERTModel, BERTFinetuningModel, RoBERTaFinetuningModel
-from transformers import BartForSequenceClassification, BartTokenizerFast
+from models.model import (
+    DistilBERTModel, ModernBERTModel, Llama3
+)
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from torch.optim.lr_scheduler import ExponentialLR
 from sklearn.utils import class_weight
 from sklearn.model_selection import KFold, train_test_split
-from transformers import AdamW
-from evaluate import evaluate
-import torch.nn.functional as F
-
-# from test import
+from trl import SFTTrainer
+from peft import LoraModel, LoraConfig
+from datasets import Dataset
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+warnings.filterwarnings("ignore")
 
-
-def load_dataframe(path):
-    return pd.read_csv(path)
-
-
-# def loss_fn(class_weights, outputs, targets):
-#     return torch.nn.CrossEntropyLoss(weight=class_weights,reduction='mean')(outputs, targets)
-
-
-def val(log_dir, model, dataloader, loss_fn, kfold, df_metrics, model_name):
-    ## Validation phase
+def val(log_dir, model, dataloader, loss_fn, kfold, df_metrics, model_name, device):
+    """Validation phase."""
     model.eval()
-    total_loss = 0.0
-    preds = []
-    targets = []
-    with torch.no_grad():
-        for _, data in enumerate(dataloader, 0):
-            ids = data["ids"].to(device)
-            mask = data["mask"].to(device)
-            targets_ = data["targets"].to(device)
-            token_type_id = data["token_type_id"].to(device)
-
-            outputs = model(ids, mask, token_type_id)
-            if model_name == "bart":
-                outputs = outputs.logits
-            loss = loss_fn(outputs, targets_)
-            total_loss += loss.item()
-            preds.extend(torch.argmax(outputs, axis=1).tolist())
-            targets.extend(targets_.tolist())
-
-    accuracy = accuracy_score(targets, preds)
-    f1 = f1_score(targets, preds, average="weighted")
-    loss = total_loss / len(dataloader)
-
-    df_metrics = pd.concat(
-        [
-            df_metrics,
-            pd.DataFrame(
-                {"kfold": [kfold + 1], "accuracy": [accuracy], "f1_score": [f1]}
-            ),
-        ],
-        axis=0,
-    )
-    df_metrics.to_csv(os.path.join(log_dir, f"test_logs.csv"), index=False)
-
+    total_loss, preds, targets = compute_val_loss_and_preds(model, dataloader, loss_fn, device, model_name)
+    accuracy, f1, loss = compute_val_metrics(preds, targets, total_loss, dataloader)
+    df_metrics = update_metrics_df(df_metrics, kfold, accuracy, f1)
+    save_metrics_to_csv(df_metrics, log_dir)
     return df_metrics
 
 
-class ContrastiveLoss(torch.nn.Module):
-    def __init__(self, margin=1.0):
-        super().__init__()
-        self.margin = margin
+def train_llama_qlora(model, tokenizer, train_data, eval_data, log_dir, epochs, batch_size, max_len):
+    """Train Llama QLoRA model."""
+    peft_config = LoraConfig(
+        lora_alpha=8, lora_dropout=0.1, r=32, bias="none", task_type="CAUSAL_LM"
+    )
 
-    def forward(self, output1, output2, label):
-        # Distância euclidiana entre as duas representações
-        euclidean_distance = F.pairwise_distance(output1, output2)
+    training_arguments = TrainingArguments(
+        output_dir=log_dir,
+        num_train_epochs=epochs,
+        per_device_train_batch_size=batch_size,
+        per_device_eval_batch_size=1,
+        optim="paged_adamw_32bit",
+        save_steps=0,
+        logging_steps=25,
+        learning_rate=2e-4,
+        weight_decay=0.001,
+        fp16=True,
+        bf16=False,
+        max_grad_norm=0.3,
+        max_steps=-1,
+        warmup_ratio=0.03,
+        group_by_length=True,
+        lr_scheduler_type="cosine",
+        report_to="tensorboard",
+        evaluation_strategy="epoch",
+        gradient_checkpointing=True,
+        eval_accumulation_steps=2,
+    )
 
-        # Perda contrativa
-        loss = torch.mean(
-            (1 - label) * torch.pow(euclidean_distance, 2)
-            + label
-            * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2)
-        )
-        return loss
+    trainer = SFTTrainer(
+        model=model,
+        train_dataset=train_data,
+        eval_dataset=eval_data,
+        peft_config=peft_config,
+        dataset_text_field="text",
+        tokenizer=tokenizer,
+        args=training_arguments,
+        packing=False,
+        max_seq_length=max_len,
+    )
+
+    trainer.train()
+    output_dir = f"{log_dir}/results/trained_model"
+    trainer.save_model(output_dir)
+    return model, tokenizer
+
+
+def inference(pipe, prompt):
+    """Inference to process a prompt using a pipeline."""
+    result = pipe(prompt)
+    answer = result[0]['generated_text'].split("=")[-1].strip().strip(".,!?;'\"")
+    return answer
+
+
+def predict(X_test, model, tokenizer):
+    """Predict labels for test data."""
+    y_pred = []
+    pipe = pipeline(
+        task="text-generation", model=model, tokenizer=tokenizer, max_new_tokens=1, temperature=0.01, do_sample=True
+    )
+    for i in tqdm(range(len(X_test))):
+        prompt = X_test.iloc[i]["text"]
+        answer = inference(pipe, prompt)
+        if answer.isdigit():
+            y_pred.append(int(answer))
+        else:
+            y_pred.append(f"Invalid literal for int(): {answer}")
+    return y_pred
 
 
 def fit(
-    model,
-    class_weights,
-    epochs,
-    optimizer,
-    train_dl,
-    val_dl,
-    log_dir,
-    checkpoint_dir,
-    name_arch,
-    fold,
-    model_name,
+    model, class_weights, epochs, optimizer,
+    train_dl, val_dl,
+    log_dir, checkpoint_dir,
+    name_arch, fold, model_name,
+    device
 ):
     loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights, reduction="mean")
-    # for param in model.distilbert.parameters():
-    # for param in model.distilbert.parameters():
-    # for param in model.distilbert.parameters():
-    # param.requires_grad = False
-    model.to(device)
+    
+    # Set random seeds for reproducibility
     torch.manual_seed(42)
     np.random.seed(42)
+
+    # Log file initialization
     log_file = os.path.join(log_dir, f"training_logs_{fold+1:02d}.txt")
+    open(log_file, 'w').close()
+
     df_metrics = pd.DataFrame([])
-    best_acc = 0
+    best_f1score = 0
     stop_train = 0
+
     for epoch in tqdm(range(epochs)):
-        ## Training phase
-        model.train()
-        total_loss_train = 0.0
-        preds_train = []
-        targets_train = []
-        for _, data in enumerate(train_dl, 0):
-            ids = data["ids"].to(device)
-            mask = data["mask"].to(device)
-            targets = data["targets"].to(device)
-            token_type_id = data["token_type_id"].to(device)
-            # Zero Gradients for every batch!
-            optimizer.zero_grad()
-            outputs = model(ids, mask, token_type_id)
-            # Compute the loss and its gradients
-            if model_name == "bart":
-                outputs = outputs.logits
-            # print(outputs.logits)
-            # exit()
-            loss = loss_fn(outputs, targets)
-            loss.backward()
+        # Training phase
+        train_loss, preds_train, targets_train = train_one_epoch(model, train_dl, optimizer, loss_fn, device, model_name)
+        accuracy_train, f1_train = compute_metrics(preds_train, targets_train)
+        train_loss /= len(train_dl)
 
-            # Adjust learning weights
-            optimizer.step()
-            # scheduler.step()
-            total_loss_train += loss.item()
-            preds_train.extend(torch.argmax(outputs, axis=1).tolist())
-            targets_train.extend(targets.tolist())
+        # Validation phase
+        val_loss, preds_val, targets_val = validate_one_epoch(model, val_dl, loss_fn, device, model_name)
+        accuracy_val, f1_val = compute_metrics(preds_val, targets_val)
+        val_loss /= len(val_dl)
 
-        ## Validation phase
-        model.eval()
-        total_loss_val = 0.0
-        preds_val = []
-        targets_val = []
-        with torch.no_grad():
-            for _, data in enumerate(val_dl, 0):
-                ids = data["ids"].to(device)
-                mask = data["mask"].to(device)
-                targets = data["targets"].to(device)
-                token_type_id = data["token_type_id"].to(device)
+        # Log metrics
+        log_metrics(epoch, epochs, train_loss, accuracy_train, f1_train, val_loss, accuracy_val, f1_val, log_file)
 
-                outputs = model(ids, mask, token_type_id)
-                if model_name == "bart":
-                    outputs = outputs.logits
-                loss_val = loss_fn(outputs, targets)
-                total_loss_val += loss_val.item()
-                preds_val.extend(torch.argmax(outputs, axis=1).tolist())
-                targets_val.extend(targets.tolist())
-
-        ## Calculate metrics
-        accuracy_train = accuracy_score(targets_train, preds_train)
-        f1_train = f1_score(targets_train, preds_train, average="weighted")
-        loss_train = total_loss_train / len(train_dl)
-
-        accuracy_val = accuracy_score(targets_val, preds_val)
-        f1_val = f1_score(targets_val, preds_val, average="weighted")
-        loss_val = total_loss_val / len(val_dl)
-
-        # Write logs to file
-        # print(f"Epoch {epoch+1}/{epochs}:")
-        # print(f"Train Loss: {loss_train:.4f}, Accuracy: {accuracy_train:.4f}, F1-score: {f1_train:.4f}")
-        # print(f"Val Loss: {loss_val:.4f}, Accuracy: {accuracy_val:.4f}, F1-score: {f1_val:.4f}")
-        log_entry = (
-            f"Epoch {epoch+1}/{epochs}: \n"
-            f"Train Loss: {loss_train:.4f}, Accuracy: {accuracy_train:.4f}, "
-            f"F1-score: {f1_train:.4f}\n"
-            f"Validation Loss: {loss_val:.4f}, Accuracy: {accuracy_val:.4f}, "
-            f"F1-score: {f1_val:.4f}\n"
-        )
-        with open(log_file, "a") as f:
-            f.write(log_entry)
-
+        # Early stopping check
         if stop_train == 10:
-            print("Validation accuracy don't change for 10 epochs, finish training")
+            print("Validation F1-score has not improved for 10 epochs. Stopping training.")
             break
+        
+        # Update metrics DataFrame
         df_metrics = pd.concat(
-            [
-                df_metrics,
-                pd.DataFrame(
-                    {
-                        "epoch": [epoch + 1],
-                        "train_accuracy": [accuracy_train],
-                        "train_f1_score": [f1_train],
-                        "val_accuracy": [accuracy_val],
-                        "val_f1_score": [f1_val],
-                    }
-                ),
-            ],
-            axis=0,
+            [df_metrics, pd.DataFrame({
+                "epoch": [epoch + 1],
+                "train_accuracy": [accuracy_train],
+                "train_f1_score": [f1_train],
+                "val_accuracy": [accuracy_val],
+                "val_f1_score": [f1_val],
+            })],
+            axis=0
         )
-        df_metrics.to_csv(
-            os.path.join(log_dir, f"training_logs_{fold+1:02d}.csv"), index=False
-        )
+        df_metrics.to_csv(os.path.join(log_dir, f"training_logs_{fold+1:02d}.csv"), index=False)
 
-        # scheduler.step()
-        # Save checkpoint
-        if best_acc < accuracy_val:
-            best_acc = accuracy_val
-            stop_train = 0
-            checkpoint_path = os.path.join(
-                checkpoint_dir, f"best_checkpoint_{name_arch.split('/')[0]}.pt"
-            )
-            torch.save(model.state_dict(), checkpoint_path)
+        # Save checkpoint if F1-score improves
+        best_f1score = save_checkpoint(model, checkpoint_dir, name_arch, f1_val, best_f1score)
         stop_train += 1
 
     return model, loss_fn
@@ -232,7 +176,7 @@ def fit(
 def train(config):
     print(f'Train the experiment: {config["experiment_name"]}')
 
-    # get hyperparameters
+    # Extract hyperparameters
     learning_rate = float(config["learning_rate"])
     batch_size = config["batch_size"]
     epochs = config["epochs"]
@@ -242,131 +186,50 @@ def train(config):
     checkpoint_dir = config["checkpoint_dir"]
     model_name = config["model_name"]
 
-    step_size = 1
-    gamma = 0.1
     name_arch = model_path.split("-")[0]
 
-    # load_datasets and preprocessing pytorch dataloader
-    ### Load experiments for alpha 3
-    # df = load_dataframe("data/percept_dataset_alpha3_p5.csv")
-    # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha3_p5.csv")
-    # df = load_dataframe("data/percept_dataset_alpha3_p3.csv")
-    # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha3_p3.csv")
-    # df = load_dataframe("data/percept_dataset_alpha3_p2plus.csv")
-    # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha3_p2plus.csv")
-    # df = load_dataframe("data/percept_dataset_alpha3_p2neg.csv")
-    # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha3_p2neg.csv")
+    # Load dataset
+    alpha_version = 3
+    dataset_type = "percept_dataset"  # Change to "gpt4-openai-classify" or "percept_dataset" as needed
+    experiment_group = "p5"  # Options: p5, p3, p2plus, p2neg
 
-    ### Load experiments for alpha 4
-    # df = load_dataframe("data/percept_dataset_alpha4_p5.csv")
-    # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha4_p5.csv")
-    # df = load_dataframe("data/percept_dataset_alpha4_p3.csv")
-    # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha4_p3.csv")
-    # df = load_dataframe("data/percept_dataset_alpha4_p2plus.csv")
-    # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha4_p2plus.csv")
-    # df = load_dataframe("data/percept_dataset_alpha4_p2neg.csv")
-    # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha4_p2neg.csv")
+    # Load the dataset for the specified experiment
+    df = load_experiment_data(alpha_version, dataset_type, experiment_group)
 
-    ### Load experiments for alpha 5
-    # df = load_dataframe("data/percept_dataset_alpha5_p5.csv")
-    # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha5_p5.csv")
-    df = load_dataframe("data/percept_dataset_alpha5_p3.csv")
-    # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha5_p3.csv")
-    # df = load_dataframe("data/percept_dataset_alpha5_p2plus.csv")
-    # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha5_p2plus.csv")
-    # df = load_dataframe("data/percept_dataset_alpha5_p2neg.csv")
-    # df = load_dataframe("data/gpt4-openai-classify/percept_dataset_alpha5_p2neg.csv")
+    # Example of further processing if dataset is loaded successfully
+    if df is not None:
+        print("Dataset preview:")
+        print(df.head())
 
-    train_val_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
+    # train_val_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
     train_val_df = df.copy()
-
-    test_df = pd.DataFrame(
-        {"text": test_df.text.to_list(), "sentiment": test_df.sentiment.to_list()}
-    )
-
-    # train_df = load_dataframe("data/train/aug_train.csv")
-
-    train_params = {
-        "batch_size": batch_size,
-        "shuffle": True,
-    }
-    # val_df = load_dataframe("data/validation/val.csv")
-
+    train_params = {"batch_size": batch_size, "shuffle": True}
     val_params = {"batch_size": batch_size, "shuffle": True}
 
-    if model_name == "distil-bert":
-        # # Define the tokenizer
+    if model_name in ["distil-bert", "distil-bert-pooling-self-attention"]:
         tokenizer = DistilBertTokenizer.from_pretrained(model_path, do_lower_case=True)
-        # tokenizer = BertTokenizer.from_pretrained(
-        #     model_path,
-        #     # do_lower_case=True
-        # )
-        # tokenizer = AutoTokenizer.from_pretrained(model_path)
-        # config = AutoConfig.from_pretrained(model_path)
-
+        
         kfold = KFold(n_splits=5, shuffle=True, random_state=42)
         df_metrics = pd.DataFrame([])
+
         for fold, (train_idx, val_idx) in enumerate(kfold.split(train_val_df)):
             print(f"Fold {fold + 1}")
-            train_df = pd.DataFrame(
-                {
-                    "text": train_val_df["text"].iloc[train_idx].to_list(),
-                    "sentiment": train_val_df["sentiment"].iloc[train_idx].to_list(),
-                }
-            )
-            val_df = pd.DataFrame(
-                {
-                    "text": train_val_df["text"].iloc[val_idx].to_list(),
-                    "sentiment": train_val_df["sentiment"].iloc[val_idx].to_list(),
-                }
-            )
+
+            train_df = train_val_df.iloc[train_idx]
+            val_df = train_val_df.iloc[val_idx]
 
             train_dl = data_loader(train_df, tokenizer, max_len, train_params)
             val_dl = data_loader(val_df, tokenizer, max_len, val_params)
-            test_dl = data_loader(test_df, tokenizer, max_len, val_params)
+            # test_dl = data_loader(test_df, tokenizer, max_len, val_params)
 
-            model = DistilBERTModel(model_path, len(df.sentiment.value_counts()))
-            # model = BERTFinetuningModel(model_path)
-            # model = RoBERTaFinetuningModel(model_path)
+            if model_name == "distil-bert":
+                model = DistilBERTModel(model_path, len(df.sentiment.unique()))
+
             model.to(device)
-            print(model)
-
-            # optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate, weight_decay=0.01)
-            optimizer = torch.optim.AdamW(
-                params=model.parameters(), lr=learning_rate, weight_decay=1e-6
-            )
-            # optimizer = torch.optim.SGD(params=model.parameters(), lr=learning_rate, momentum=.9)
-            # scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=learning_rate, steps_per_epoch=len(train_dl), epochs=epochs)
+            optimizer = torch.optim.AdamW(params=model.parameters(), lr=learning_rate, weight_decay=1e-6)
 
             class_size = train_df.sentiment.value_counts().sort_index().to_list()
-            if len(class_size) == 3:
-                class_weights = (
-                    torch.Tensor(
-                        [1 / class_size[0], 1 / class_size[1], 1 / class_size[2]]
-                    )
-                    .type(torch.float)
-                    .to(device)
-                )
-            elif len(class_size) == 2:
-                class_weights = (
-                    torch.Tensor([1 / class_size[0], 1 / class_size[1]])
-                    .type(torch.float)
-                    .to(device)
-                )
-            else:
-                class_weights = (
-                    torch.Tensor(
-                        [
-                            1 / class_size[0],
-                            1 / class_size[1],
-                            1 / class_size[2],
-                            1 / class_size[3],
-                            1 / class_size[4],
-                        ]
-                    )
-                    .type(torch.float)
-                    .to(device)
-                )
+            class_weights = torch.Tensor([1 / c for c in class_size]).type(torch.float).to(device)
 
             model, loss_fn = fit(
                 model,
@@ -382,122 +245,136 @@ def train(config):
                 model_name,
             )
 
-            # df_metrics = val(log_dir, model, test_dl, loss_fn, fold, df_metrics, model_name)
-            df_metrics = val(
-                log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name
+            df_metrics = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name)
+
+        mean_f1 = np.mean(df_metrics["f1_score"].to_numpy())
+        confidence_interval = stats.t.interval(
+            0.95, len(df_metrics) - 1, loc=mean_f1, scale=stats.sem(df_metrics["f1_score"].to_numpy())
+        )
+
+        print(f"Mean F1-score: {mean_f1 * 100:.2f}%")
+        print(f"Confidence Interval: {confidence_interval}")
+    
+    elif model_name == "modern-bert":
+        kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+        df_metrics = pd.DataFrame([])
+
+        # Initialize the ModernBERT model
+        print(model_path)
+        model = ModernBERTModel(model_path, len(df.sentiment.unique()))
+
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        model.to(device)
+        print(model)
+        optimizer = torch.optim.AdamW(params=model.parameters(), lr=learning_rate, weight_decay=1e-6)
+
+        
+        for fold, (train_idx, val_idx) in enumerate(kfold.split(train_val_df)):
+            print(f"Fold {fold + 1}")
+
+            train_df = pd.DataFrame(
+                {
+                    "text": train_val_df["text"].iloc[train_idx].to_list(),
+                    "sentiment": train_val_df["sentiment"].iloc[train_idx].to_list(),
+                }
+            )
+            val_df = pd.DataFrame(
+                {
+                    "text": train_val_df["text"].iloc[val_idx].to_list(),
+                    "sentiment": train_val_df["sentiment"].iloc[val_idx].to_list(),
+                }
             )
 
-        print(f'Mean F1-score: {np.mean(df_metrics["f1_score"].to_numpy())*100:.2f}%')
+            class_size = train_df.sentiment.value_counts().sort_index().to_list()
+            class_weights = torch.Tensor([1 / c for c in class_size]).type(torch.float).to(device)
+
+            train_dl = data_loader(train_df, tokenizer, max_len, train_params)
+            val_dl = data_loader(val_df, tokenizer, max_len, val_params)
+            # test_dl = data_loader(test_df, tokenizer, max_len, val_params)
+
+            model, loss_fn = fit(
+                model, class_weights, epochs, optimizer,
+                train_dl, val_dl,
+                log_dir, checkpoint_dir,
+                name_arch, fold, model_name,
+                device
+            )
+
+            df_metrics = val(log_dir, model, val_dl, loss_fn, kfold, df_metrics, model_name, device)
+
+        mean_f1 = np.mean(df_metrics["f1_score"].to_numpy())
+        confidence_interval = stats.t.interval(
+            0.95, len(df_metrics) - 1, loc=mean_f1, scale=stats.sem(df_metrics["f1_score"].to_numpy())
+        )
+
+        print(f"Mean F1-score: {mean_f1 * 100:.2f}%")
+        print(f"Confidence Interval: {confidence_interval}")
+
+    elif model_name == "llama-qlora":
+        kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+        df_metrics = pd.DataFrame([])
+
+        llama3 = Llama3(model_path)
+        model, tokenizer = llama3.get_model()
+
+        prompt = """What is the sentiment of this description? Please choose an answer from \
+            {"Positive": 1, "Negative": 0}"""
+
+        for fold, (train_idx, val_idx) in enumerate(kfold.split(train_val_df)):
+            print(f"Fold {fold + 1}")
+
+            train_df = train_val_df.iloc[train_idx]
+            val_df = train_val_df.iloc[val_idx]
+
+            train_df["input"] = train_df["text"]
+            val_df["input"] = val_df["text"]
+
+            train_df["text"] = train_df.apply(lambda x: f"{prompt}{x['text']}={x['sentiment']}", axis=1)
+            val_df["text"] = val_df.apply(lambda x: f"{prompt}{x['text']}=", axis=1)
+
+            train_data = Dataset.from_pandas(train_df)
+            eval_data = Dataset.from_pandas(val_df)
+
+            model, tokenizer = train_llama_qlora(
+                model, tokenizer, train_data, eval_data, log_dir, epochs, batch_size, max_len
+            )
+
+            y_pred_temp = predict(val_df, model, tokenizer)
+
+            y_true_temp = val_df["sentiment"].tolist()
+            y_pred = [pred for i, pred in enumerate(y_pred_temp) if isinstance(pred, int)]
+            y_true = [y_true_temp[i] for i, pred in enumerate(y_pred_temp) if isinstance(pred, int)]
+
+            accuracy = accuracy_score(y_true, y_pred)
+            f1 = f1_score(y_true, y_pred, average="weighted")
+
+            df_metrics = pd.concat(
+                [
+                    df_metrics,
+                    pd.DataFrame({"kfold": [fold + 1], "accuracy": [accuracy], "f1_score": [f1]}),
+                ],
+                axis=0,
+            )
+
+            df_metrics.to_csv(os.path.join(log_dir, "test_logs.csv"), index=False)
+
+        mean_f1 = np.mean(df_metrics["f1_score"].to_numpy())
+        confidence_interval = stats.t.interval(
+            0.95, len(df_metrics) - 1, loc=mean_f1, scale=stats.sem(df_metrics["f1_score"].to_numpy())
+        )
+
+        print(f"Mean F1-score: {mean_f1 * 100:.2f}%")
+        print(f"Confidence Interval: {confidence_interval}")
     else:
-        # tokenizer = AutoTokenizer.from_pretrained(model_path)
-        tokenizer = BartTokenizerFast.from_pretrained(model_path)
-        # config_model = AutoConfig.from_pretrained(model_path)
-
-        kfold = KFold(n_splits=5, shuffle=True, random_state=42)
-        df_metrics = pd.DataFrame([])
-        for fold, (train_idx, val_idx) in enumerate(kfold.split(train_val_df)):
-            print(f"Fold {fold + 1}")
-            train_df = pd.DataFrame(
-                {
-                    "text": train_val_df["text"].iloc[train_idx].to_list(),
-                    "sentiment": train_val_df["sentiment"].iloc[train_idx].to_list(),
-                }
-            )
-            val_df = pd.DataFrame(
-                {
-                    "text": train_val_df["text"].iloc[val_idx].to_list(),
-                    "sentiment": train_val_df["sentiment"].iloc[val_idx].to_list(),
-                }
-            )
-
-            train_dl = data_loader(train_df, tokenizer, max_len, train_params)
-            val_dl = data_loader(val_df, tokenizer, max_len, val_params)
-            test_dl = data_loader(test_df, tokenizer, max_len, val_params)
-
-            class_size = train_df.sentiment.value_counts().sort_index().to_list()
-
-            if len(class_size) == 3:
-                class_weights = (
-                    torch.Tensor(
-                        [1 / class_size[0], 1 / class_size[1], 1 / class_size[2]]
-                    )
-                    .type(torch.float)
-                    .to(device)
-                )
-            elif len(class_size) == 2:
-                class_weights = (
-                    torch.Tensor([1 / class_size[0], 1 / class_size[1]])
-                    .type(torch.float)
-                    .to(device)
-                )
-            else:
-                class_weights = (
-                    torch.Tensor(
-                        [
-                            1 / class_size[0],
-                            1 / class_size[1],
-                            1 / class_size[2],
-                            1 / class_size[3],
-                            1 / class_size[4],
-                        ]
-                    )
-                    .type(torch.float)
-                    .to(device)
-                )
-
-            model = BartForSequenceClassification.from_pretrained(
-                "facebook/bart-large-mnli",
-                num_labels=len(class_size),
-                ignore_mismatched_sizes=True,
-            )
-            model.to(device)
-            print(model)
-
-            optimizer = torch.optim.AdamW(
-                params=model.parameters(), lr=learning_rate, weight_decay=1e-6
-            )
-
-            model, loss_fn = fit(
-                model,
-                class_weights,
-                epochs,
-                optimizer,
-                train_dl,
-                val_dl,
-                log_dir,
-                checkpoint_dir,
-                name_arch,
-                fold,
-                model_name,
-            )
-
-            # df_metrics = val(log_dir, model, test_dl, loss_fn, fold, df_metrics, model_name)
-            df_metrics = val(
-                log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name
-            )
-
-        print(f'Mean F1-score: {np.mean(df_metrics["f1_score"].to_numpy())*100:.2f}%')
-
-        # data = train_df.text
-        # target = train_df.sentiment
-        # set_name = "Train"
-        # evaluate(tokenizer, model, config_model, data, target, log_dir, set_name)
-        # data = val_df.text
-        # target = val_df.sentiment
-        # set_name = "Validation"
-        # evaluate(tokenizer, model, config_model, data, target, log_dir, set_name)
+        raise ValueError(f"Unsupported model name: {model_name}")
 
 
 if __name__ == "__main__":
-    # Parse command line arguments
     parser = argparse.ArgumentParser(description="Train the DL model.")
     parser.add_argument(
         "--config", type=str, default="experiments/experiment1/config.yaml"
     )
     args = parser.parse_args()
-
-    # Load configuration
     config_path = args.config
     config = load_config(config_path)
-
     train(config)
