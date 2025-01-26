@@ -300,7 +300,7 @@ def train(config):
                 device
             )
 
-            df_metrics = val(log_dir, model, val_dl, loss_fn, kfold, df_metrics, model_name, device)
+            df_metrics = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device)
 
         mean_f1 = np.mean(df_metrics["f1_score"].to_numpy())
         confidence_interval = stats.t.interval(
