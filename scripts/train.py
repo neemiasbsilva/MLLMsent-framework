@@ -28,6 +28,8 @@ from sklearn.model_selection import KFold, train_test_split
 from trl import SFTTrainer
 from peft import LoraModel, LoraConfig
 from datasets import Dataset
+from transformers.optimization import AdamW
+
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -149,8 +151,8 @@ def fit(
         log_metrics(epoch, epochs, train_loss, accuracy_train, f1_train, val_loss, accuracy_val, f1_val, log_file)
 
         # Early stopping check
-        if stop_train == 10:
-            print("Validation F1-score has not improved for 10 epochs. Stopping training.")
+        if stop_train == 20:
+            print("Validation F1-score has not improved for 30 epochs. Stopping training.")
             break
         
         # Update metrics DataFrame
@@ -173,7 +175,7 @@ def fit(
     return model, loss_fn
 
 
-def train(config):
+def train(config, config_path):
     print(f'Train the experiment: {config["experiment_name"]}')
 
     # Extract hyperparameters
@@ -187,12 +189,18 @@ def train(config):
     model_name = config["model_name"]
 
     name_arch = model_path.split("-")[0]
-
     # Load dataset
-    alpha_version = 3
-    dataset_type = "percept_dataset"  # Change to "gpt4-openai-classify" or "percept_dataset" as needed
-    experiment_group = "p5"  # Options: p5, p3, p2plus, p2neg
+    alpha_version = int(config_path.split('/')[-2].split('-')[-1][-1]) # 3, 4 or 5
+    # /home/neemias/PerceptSent-LLM-approach/experiments/openai-modernbert-experiment-p2neg-alpha3/config.yaml
+    if config_path.split('/')[-2].split('-')[0] == "openai":
+        dataset_type = "gpt4-openai-classify" 
+    elif config_path.split('/')[-2].split('-')[0] == "deepseek":
+        dataset_type = "deepseek"
+    else:
+        dataset_type = "percept_dataset"
 
+    experiment_group = config_path.split('/')[-2].split('-')[-2]  # Options: p5, p3, p2plus, p2neg
+    print(f"Sigma version: {alpha_version} | experiment_problem: {experiment_group}")
     # Load the dataset for the specified experiment
     df = load_experiment_data(alpha_version, dataset_type, experiment_group)
 
@@ -258,18 +266,22 @@ def train(config):
     elif model_name == "modern-bert":
         kfold = KFold(n_splits=5, shuffle=True, random_state=42)
         df_metrics = pd.DataFrame([])
-
-        # Initialize the ModernBERT model
-        print(model_path)
-        model = ModernBERTModel(model_path, len(df.sentiment.unique()))
-
-        tokenizer = AutoTokenizer.from_pretrained(model_path)
-        model.to(device)
-        print(model)
-        optimizer = torch.optim.AdamW(params=model.parameters(), lr=learning_rate, weight_decay=1e-6)
-
         
         for fold, (train_idx, val_idx) in enumerate(kfold.split(train_val_df)):
+            print(model_path)
+            # Initialize the ModernBERT model
+            model = ModernBERTModel(model_path, len(df.sentiment.unique()))
+            tokenizer = AutoTokenizer.from_pretrained(model_path)
+            model.to(device)
+            # optimizer = torch.optim.AdamW(params=model.parameters(), lr=learning_rate, weight_decay=1e-6)
+            optimizer = AdamW(
+                model.parameters(),
+                lr=learning_rate,
+                # betas=(0.9, 0.999),
+                # eps=1e-8,  # Controls numerical stability
+                weight_decay=1e-6
+            )
+            # print(model)
             print(f"Fold {fold + 1}")
 
             train_df = pd.DataFrame(
@@ -301,6 +313,7 @@ def train(config):
             )
 
             df_metrics = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device)
+            del model
 
         mean_f1 = np.mean(df_metrics["f1_score"].to_numpy())
         confidence_interval = stats.t.interval(
@@ -377,4 +390,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     config_path = args.config
     config = load_config(config_path)
-    train(config)
+    train(config, config_path)
