@@ -20,6 +20,8 @@ from scripts.utils_dl import (
 from models.model import (
     DistilBERTModel, ModernBERTModel, Llama3
 )
+
+from transformers import BartForSequenceClassification, BartTokenizerFast
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from torch.optim.lr_scheduler import ExponentialLR
@@ -30,8 +32,14 @@ from peft import LoraModel, LoraConfig
 from datasets import Dataset
 from transformers.optimization import AdamW
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"  # Use GPU 1 (index 1)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
+
+if device == "cuda":
+    print(f"Using CUDA device: {torch.cuda.get_device_name(0)}") # Get info about the visible device
+else:
+    print("Using CPU")
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 warnings.filterwarnings("ignore")
 
@@ -133,8 +141,10 @@ def fit(
     open(log_file, 'w').close()
 
     df_metrics = pd.DataFrame([])
+
     best_f1score = 0
-    stop_train = 0
+    patience = 20  # Number of epochs to wait for improvement
+    patience_counter = 0  # Counter for epochs without improvement
 
     for epoch in tqdm(range(epochs)):
         # Training phase
@@ -150,11 +160,18 @@ def fit(
         # Log metrics
         log_metrics(epoch, epochs, train_loss, accuracy_train, f1_train, val_loss, accuracy_val, f1_val, log_file)
 
-        # Early stopping check
-        if stop_train == 20:
-            print("Validation F1-score has not improved for 30 epochs. Stopping training.")
-            break
+        # Save checkpoint if F1-score improves
+        if f1_val > best_f1score:
+            best_f1score = save_checkpoint(model, checkpoint_dir, name_arch, f1_val, best_f1score)
+            patience_counter = 0  # Reset patience counter
+        else:
+            patience_counter += 1  # Increment patience counter
         
+        # Early stopping check
+        if patience_counter >= patience:
+            print(f"Validation F1-score has not improved for {patience} epochs. Stopping training.")
+            break
+
         # Update metrics DataFrame
         df_metrics = pd.concat(
             [df_metrics, pd.DataFrame({
@@ -167,10 +184,6 @@ def fit(
             axis=0
         )
         df_metrics.to_csv(os.path.join(log_dir, f"training_logs_{fold+1:02d}.csv"), index=False)
-
-        # Save checkpoint if F1-score improves
-        best_f1score = save_checkpoint(model, checkpoint_dir, name_arch, f1_val, best_f1score)
-        stop_train += 1
 
     return model, loss_fn
 
@@ -223,8 +236,18 @@ def train(config, config_path):
         for fold, (train_idx, val_idx) in enumerate(kfold.split(train_val_df)):
             print(f"Fold {fold + 1}")
 
-            train_df = train_val_df.iloc[train_idx]
-            val_df = train_val_df.iloc[val_idx]
+            train_df = pd.DataFrame(
+                {
+                    "text": train_val_df["text"].iloc[train_idx].to_list(),
+                    "sentiment": train_val_df["sentiment"].iloc[train_idx].to_list(),
+                }
+            )
+            val_df = pd.DataFrame(
+                {
+                    "text": train_val_df["text"].iloc[val_idx].to_list(),
+                    "sentiment": train_val_df["sentiment"].iloc[val_idx].to_list(),
+                }
+            )
 
             train_dl = data_loader(train_df, tokenizer, max_len, train_params)
             val_dl = data_loader(val_df, tokenizer, max_len, val_params)
@@ -251,9 +274,10 @@ def train(config, config_path):
                 name_arch,
                 fold,
                 model_name,
+                device
             )
 
-            df_metrics = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name)
+            df_metrics = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device)
 
         mean_f1 = np.mean(df_metrics["f1_score"].to_numpy())
         confidence_interval = stats.t.interval(
@@ -370,6 +394,67 @@ def train(config, config_path):
             )
 
             df_metrics.to_csv(os.path.join(log_dir, "test_logs.csv"), index=False)
+
+        mean_f1 = np.mean(df_metrics["f1_score"].to_numpy())
+        confidence_interval = stats.t.interval(
+            0.95, len(df_metrics) - 1, loc=mean_f1, scale=stats.sem(df_metrics["f1_score"].to_numpy())
+        )
+
+        print(f"Mean F1-score: {mean_f1 * 100:.2f}%")
+        print(f"Confidence Interval: {confidence_interval}")
+    elif model_name == "bart": 
+        kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+        df_metrics = pd.DataFrame([])
+        
+        for fold, (train_idx, val_idx) in enumerate(kfold.split(train_val_df)):
+            # print(model_path)
+            print(f"Fold {fold + 1}")
+
+            train_df = pd.DataFrame(
+                {
+                    "text": train_val_df["text"].iloc[train_idx].to_list(),
+                    "sentiment": train_val_df["sentiment"].iloc[train_idx].to_list(),
+                }
+            )
+            val_df = pd.DataFrame(
+                {
+                    "text": train_val_df["text"].iloc[val_idx].to_list(),
+                    "sentiment": train_val_df["sentiment"].iloc[val_idx].to_list(),
+                }
+            )
+
+            class_size = train_df.sentiment.value_counts().sort_index().to_list()
+            class_weights = torch.Tensor([1 / c for c in class_size]).type(torch.float).to(device)
+            # Initialize the BART-LARGE MNLI model
+            model = BartForSequenceClassification.from_pretrained(
+                model_path,
+                num_labels=len(class_size),
+                ignore_mismatched_sizes=True,
+            )
+            tokenizer = BartTokenizerFast.from_pretrained(model_path)
+            model.to(device)
+            # optimizer = torch.optim.AdamW(params=model.parameters(), lr=learning_rate, weight_decay=1e-6)
+            optimizer = AdamW(
+                model.parameters(),
+                lr=learning_rate,
+                # betas=(0.9, 0.999),
+                # eps=1e-8,  # Controls numerical stability
+                weight_decay=1e-6
+            )
+            train_dl = data_loader(train_df, tokenizer, max_len, train_params)
+            val_dl = data_loader(val_df, tokenizer, max_len, val_params)
+            # test_dl = data_loader(test_df, tokenizer, max_len, val_params)
+
+            model, loss_fn = fit(
+                model, class_weights, epochs, optimizer,
+                train_dl, val_dl,
+                log_dir, checkpoint_dir,
+                name_arch, fold, model_name,
+                device
+            )
+
+            df_metrics = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device)
+            del model
 
         mean_f1 = np.mean(df_metrics["f1_score"].to_numpy())
         confidence_interval = stats.t.interval(
