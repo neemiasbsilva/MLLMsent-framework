@@ -32,7 +32,7 @@ from peft import LoraModel, LoraConfig
 from datasets import Dataset
 from transformers.optimization import AdamW
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"  # Use GPU 1 (index 1)
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # Use GPU 1 (index 1)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -50,7 +50,7 @@ def val(log_dir, model, dataloader, loss_fn, kfold, df_metrics, model_name, devi
     accuracy, f1, loss = compute_val_metrics(preds, targets, total_loss, dataloader)
     df_metrics = update_metrics_df(df_metrics, kfold, accuracy, f1)
     save_metrics_to_csv(df_metrics, log_dir)
-    return df_metrics
+    return df_metrics, preds, targets
 
 
 def train_llama_qlora(model, tokenizer, train_data, eval_data, log_dir, epochs, batch_size, max_len):
@@ -277,7 +277,16 @@ def train(config, config_path):
                 device
             )
 
-            df_metrics = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device)
+            df_metrics, y_pred, y_true = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device)
+            result_df = pd.DataFrame(
+                {
+                    "id": train_val_df["id"].iloc[val_idx].to_list(),
+                    "text": train_val_df["text"].iloc[val_idx].to_list(),
+                    "target": y_true,
+                    "prediction": y_pred
+                }
+            )
+            result_df.to_csv(os.path.join(log_dir, f"test_logs_{fold+1:02d}.csv"), index=False)
 
         mean_f1 = np.mean(df_metrics["f1_score"].to_numpy())
         confidence_interval = stats.t.interval(
@@ -336,7 +345,16 @@ def train(config, config_path):
                 device
             )
 
-            df_metrics = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device)
+            df_metrics, y_pred, y_true = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device)
+            result_df = pd.DataFrame(
+                {
+                    "id": train_val_df["id"].iloc[val_idx].to_list(),
+                    "text": train_val_df["text"].iloc[val_idx].to_list(),
+                    "target": y_true,
+                    "prediction": y_pred
+                }
+            )
+            result_df.to_csv(os.path.join(log_dir, f"test_logs_{fold+1:02d}.csv"), index=False)
             del model
 
         mean_f1 = np.mean(df_metrics["f1_score"].to_numpy())
@@ -394,6 +412,16 @@ def train(config, config_path):
             )
 
             df_metrics.to_csv(os.path.join(log_dir, "test_logs.csv"), index=False)
+            result_df = pd.DataFrame(
+                {
+                    "id": train_val_df["id"].iloc[val_idx].to_list(),
+                    "text": train_val_df["text"].iloc[val_idx].to_list(),
+                    "target": y_true,
+                    "prediction": y_pred
+                }
+            )
+            result_df.to_csv(os.path.join(log_dir, f"test_logs_{fold+1:02d}.csv"), index=False)
+            
 
         mean_f1 = np.mean(df_metrics["f1_score"].to_numpy())
         confidence_interval = stats.t.interval(
@@ -453,7 +481,17 @@ def train(config, config_path):
                 device
             )
 
-            df_metrics = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device)
+            df_metrics, pred, target = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device)
+            result_df = pd.DataFrame(
+                {
+                    "id": train_val_df["id"].iloc[val_idx].to_list(),
+                    "text": train_val_df["text"].iloc[val_idx].to_list(),
+                    "target": target,
+                    "prediction": pred
+                }
+            )
+            result_df.to_csv(os.path.join(log_dir, f"test_logs_{fold+1:02d}.csv"), index=False)
+
             del model
 
         mean_f1 = np.mean(df_metrics["f1_score"].to_numpy())

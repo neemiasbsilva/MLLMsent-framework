@@ -1,93 +1,63 @@
 Epoch 1/100: 
-Train Loss: 1.5440, Accuracy: 0.3766, F1-score: 0.3632
-Validation Loss: 1.4047, Accuracy: 0.5574, F1-score: 0.5215
+Train Loss: 1.4602, Accuracy: 0.3816, F1-score: 0.3848
+Validation Loss: 1.2137, Accuracy: 0.4628, F1-score: 0.5081
 Epoch 2/100: 
-Train Loss: 1.3237, Accuracy: 0.5147, F1-score: 0.4992
-Validation Loss: 1.2864, Accuracy: 0.5034, F1-score: 0.4836
+Train Loss: 1.0748, Accuracy: 0.5855, F1-score: 0.5900
+Validation Loss: 1.1100, Accuracy: 0.5709, F1-score: 0.5628
 Epoch 3/100: 
-Train Loss: 1.1409, Accuracy: 0.5678, F1-score: 0.5760
-Validation Loss: 1.1220, Accuracy: 0.5777, F1-score: 0.5797
+Train Loss: 0.8618, Accuracy: 0.6849, F1-score: 0.6922
+Validation Loss: 0.9267, Accuracy: 0.6453, F1-score: 0.6677
 Epoch 4/100: 
-Train Loss: 0.9970, Accuracy: 0.6158, F1-score: 0.6270
-Validation Loss: 1.1674, Accuracy: 0.5405, F1-score: 0.5393
+Train Loss: 0.6427, Accuracy: 0.7624, F1-score: 0.7715
+Validation Loss: 0.9506, Accuracy: 0.6216, F1-score: 0.6308
 Epoch 5/100: 
-Train Loss: 0.8938, Accuracy: 0.6672, F1-score: 0.6716
-Validation Loss: 1.0599, Accuracy: 0.6047, F1-score: 0.6147
+Train Loss: 0.3710, Accuracy: 0.8736, F1-score: 0.8771
+Validation Loss: 0.9981, Accuracy: 0.6655, F1-score: 0.6854
 Epoch 6/100: 
-Train Loss: 0.8143, Accuracy: 0.6858, F1-score: 0.6962
-Validation Loss: 1.1376, Accuracy: 0.6014, F1-score: 0.5894
+Train Loss: 0.2046, Accuracy: 0.9343, F1-score: 0.9354
+Validation Loss: 1.0867, Accuracy: 0.6318, F1-score: 0.6537
 Epoch 7/100: 
-Train Loss: 0.8070, Accuracy: 0.7094, F1-score: 0.7126
-Validation Loss: 1.0634, Accuracy: 0.5811, F1-score: 0.6059
+Train Loss: 0.1736, Accuracy: 0.9427, F1-score: 0.9435
+Validation Loss: 1.1485, Accuracy: 0.6858, F1-score: 0.6958
 Epoch 8/100: 
-Train Loss: 0.6381, Accuracy: 0.7683, F1-score: 0.7745
-Validation Loss: 1.0979, Accuracy: 0.6351, F1-score: 0.6288
+Train Loss: 0.0468, Accuracy: 0.9907, F1-score: 0.9908
+Validation Loss: 1.4479, Accuracy: 0.7027, F1-score: 0.6969
 Epoch 9/100: 
-Train Loss: 0.5098, Accuracy: 0.8357, F1-score: 0.8391
-Validation Loss: 1.1566, Accuracy: 0.5912, F1-score: 0.6098
+Train Loss: 0.0233, Accuracy: 0.9949, F1-score: 0.9950
+Validation Loss: 1.6647, Accuracy: 0.6622, F1-score: 0.6657
 Epoch 10/100: 
-Train Loss: 0.3785, Accuracy: 0.8745, F1-score: 0.8773
-Validation Loss: 1.1585, Accuracy: 0.6284, F1-score: 0.6360
+Train Loss: 0.0622, Accuracy: 0.9857, F1-score: 0.9857
+Validation Loss: 1.5047, Accuracy: 0.6858, F1-score: 0.6817
 Epoch 11/100: 
-Train Loss: 0.2909, Accuracy: 0.9166, F1-score: 0.9183
-Validation Loss: 1.2712, Accuracy: 0.6419, F1-score: 0.6493
+Train Loss: 0.0111, Accuracy: 0.9992, F1-score: 0.9992
+Validation Loss: 1.6919, Accuracy: 0.6959, F1-score: 0.6856
 Epoch 12/100: 
-Train Loss: 0.2352, Accuracy: 0.9343, F1-score: 0.9351
-Validation Loss: 1.3042, Accuracy: 0.6351, F1-score: 0.6395
+Train Loss: 0.0047, Accuracy: 1.0000, F1-score: 1.0000
+Validation Loss: 1.7403, Accuracy: 0.7027, F1-score: 0.6932
 Epoch 13/100: 
-Train Loss: 0.1406, Accuracy: 0.9621, F1-score: 0.9624
-Validation Loss: 1.4007, Accuracy: 0.6453, F1-score: 0.6435
+Train Loss: 0.0028, Accuracy: 1.0000, F1-score: 1.0000
+Validation Loss: 1.7811, Accuracy: 0.6993, F1-score: 0.6910
 Epoch 14/100: 
-Train Loss: 0.0809, Accuracy: 0.9789, F1-score: 0.9790
-Validation Loss: 1.6282, Accuracy: 0.6014, F1-score: 0.5986
+Train Loss: 0.0021, Accuracy: 1.0000, F1-score: 1.0000
+Validation Loss: 1.8824, Accuracy: 0.7061, F1-score: 0.6984
 Epoch 15/100: 
-Train Loss: 0.2406, Accuracy: 0.9149, F1-score: 0.9166
-Validation Loss: 1.6802, Accuracy: 0.5980, F1-score: 0.5896
+Train Loss: 0.0017, Accuracy: 1.0000, F1-score: 1.0000
+Validation Loss: 1.8484, Accuracy: 0.7027, F1-score: 0.6947
 Epoch 16/100: 
-Train Loss: 0.1886, Accuracy: 0.9436, F1-score: 0.9442
-Validation Loss: 1.6134, Accuracy: 0.6250, F1-score: 0.6128
+Train Loss: 0.0015, Accuracy: 1.0000, F1-score: 1.0000
+Validation Loss: 1.9296, Accuracy: 0.7027, F1-score: 0.6947
 Epoch 17/100: 
-Train Loss: 0.1478, Accuracy: 0.9545, F1-score: 0.9549
-Validation Loss: 1.6193, Accuracy: 0.5980, F1-score: 0.6083
+Train Loss: 0.0012, Accuracy: 1.0000, F1-score: 1.0000
+Validation Loss: 1.9376, Accuracy: 0.7027, F1-score: 0.6947
 Epoch 18/100: 
-Train Loss: 0.0742, Accuracy: 0.9747, F1-score: 0.9749
-Validation Loss: 1.8402, Accuracy: 0.6453, F1-score: 0.6168
+Train Loss: 0.0011, Accuracy: 1.0000, F1-score: 1.0000
+Validation Loss: 1.9982, Accuracy: 0.6993, F1-score: 0.6915
 Epoch 19/100: 
-Train Loss: 0.0485, Accuracy: 0.9890, F1-score: 0.9891
-Validation Loss: 1.6816, Accuracy: 0.6419, F1-score: 0.6267
+Train Loss: 0.0009, Accuracy: 1.0000, F1-score: 1.0000
+Validation Loss: 2.0044, Accuracy: 0.6993, F1-score: 0.6915
 Epoch 20/100: 
-Train Loss: 0.0220, Accuracy: 0.9975, F1-score: 0.9975
-Validation Loss: 2.0094, Accuracy: 0.6250, F1-score: 0.6189
+Train Loss: 0.0008, Accuracy: 1.0000, F1-score: 1.0000
+Validation Loss: 2.0482, Accuracy: 0.6993, F1-score: 0.6922
 Epoch 21/100: 
-Train Loss: 0.0166, Accuracy: 0.9983, F1-score: 0.9983
-Validation Loss: 1.7595, Accuracy: 0.6250, F1-score: 0.6196
-Epoch 22/100: 
-Train Loss: 0.0148, Accuracy: 0.9983, F1-score: 0.9983
-Validation Loss: 1.9940, Accuracy: 0.6149, F1-score: 0.6098
-Epoch 23/100: 
-Train Loss: 0.0114, Accuracy: 0.9992, F1-score: 0.9992
-Validation Loss: 2.0886, Accuracy: 0.6081, F1-score: 0.6036
-Epoch 24/100: 
-Train Loss: 0.0098, Accuracy: 1.0000, F1-score: 1.0000
-Validation Loss: 2.0185, Accuracy: 0.6182, F1-score: 0.6121
-Epoch 25/100: 
-Train Loss: 0.0087, Accuracy: 1.0000, F1-score: 1.0000
-Validation Loss: 2.0243, Accuracy: 0.6149, F1-score: 0.6099
-Epoch 26/100: 
-Train Loss: 0.0069, Accuracy: 1.0000, F1-score: 1.0000
-Validation Loss: 2.0938, Accuracy: 0.6182, F1-score: 0.6128
-Epoch 27/100: 
-Train Loss: 0.0059, Accuracy: 1.0000, F1-score: 1.0000
-Validation Loss: 2.0478, Accuracy: 0.6182, F1-score: 0.6143
-Epoch 28/100: 
-Train Loss: 0.0050, Accuracy: 1.0000, F1-score: 1.0000
-Validation Loss: 2.1440, Accuracy: 0.6115, F1-score: 0.6065
-Epoch 29/100: 
-Train Loss: 0.0045, Accuracy: 1.0000, F1-score: 1.0000
-Validation Loss: 2.2006, Accuracy: 0.6115, F1-score: 0.6065
-Epoch 30/100: 
-Train Loss: 0.0040, Accuracy: 1.0000, F1-score: 1.0000
-Validation Loss: 2.1262, Accuracy: 0.6149, F1-score: 0.6096
-Epoch 31/100: 
-Train Loss: 0.0037, Accuracy: 1.0000, F1-score: 1.0000
-Validation Loss: 2.1823, Accuracy: 0.6115, F1-score: 0.6068
+Train Loss: 0.0007, Accuracy: 1.0000, F1-score: 1.0000
+Validation Loss: 2.1121, Accuracy: 0.6993, F1-score: 0.6922
