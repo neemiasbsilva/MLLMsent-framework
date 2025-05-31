@@ -53,16 +53,25 @@ def train_one_epoch(model, train_dl, optimizer, loss_fn, device, model_name):
     preds, targets = [], []
     
     for _, data in enumerate(train_dl):
-        ids = data["ids"].to(device)
-        mask = data["mask"].to(device)
-        targets_batch = data["targets"].to(device)
-        token_type_id = data["token_type_id"].to(device)
-        
-        optimizer.zero_grad()
-        outputs = model(ids, mask, token_type_id)
-
-        if model_name == "bart":
+        if model_name == "swin":
+            pixel_values = data["pixel_values"].to(device)
+            targets_batch = data["targets"].to(device)
+            
+            optimizer.zero_grad()
+            outputs = model(pixel_values)
             outputs = outputs.logits
+        else:
+            ids = data["ids"].to(device)
+            mask = data["mask"].to(device)
+            targets_batch = data["targets"].to(device)
+            token_type_id = data["token_type_id"].to(device)
+            
+            optimizer.zero_grad()
+            outputs = model(ids, mask, token_type_id)
+
+            if model_name == "bart":
+                outputs = outputs.logits
+
         loss = compute_loss(outputs, targets_batch, loss_fn, model_name)
         loss.backward()
         optimizer.step()
@@ -81,15 +90,23 @@ def validate_one_epoch(model, val_dl, loss_fn, device, model_name):
 
     with torch.no_grad():
         for _, data in enumerate(val_dl):
-            ids = data["ids"].to(device)
-            mask = data["mask"].to(device)
-            targets_batch = data["targets"].to(device)
-            token_type_id = data["token_type_id"].to(device)
-
-            outputs = model(ids, mask, token_type_id)
-
-            if model_name == "bart":
+            if model_name == "swin":
+                pixel_values = data["pixel_values"].to(device)
+                targets_batch = data["targets"].to(device)
+                
+                outputs = model(pixel_values)
                 outputs = outputs.logits
+            else:
+                ids = data["ids"].to(device)
+                mask = data["mask"].to(device)
+                targets_batch = data["targets"].to(device)
+                token_type_id = data["token_type_id"].to(device)
+
+                outputs = model(ids, mask, token_type_id)
+
+                if model_name == "bart":
+                    outputs = outputs.logits
+
             loss = compute_loss(outputs, targets_batch, loss_fn, model_name)
 
             total_loss += loss.item()
@@ -130,14 +147,21 @@ def compute_val_loss_and_preds(model, dataloader, loss_fn, device, model_name):
     
     with torch.no_grad():
         for _, data in enumerate(dataloader):
-            ids = data["ids"].to(device)
-            mask = data["mask"].to(device)
-            targets_batch = data["targets"].to(device)
-            token_type_id = data["token_type_id"].to(device)
-
-            outputs = model(ids, mask, token_type_id)
-            if model_name == "bart":
+            if model_name == "swin":
+                pixel_values = data["pixel_values"].to(device)
+                targets_batch = data["targets"].to(device)
+                
+                outputs = model(pixel_values)
                 outputs = outputs.logits
+            else:
+                ids = data["ids"].to(device)
+                mask = data["mask"].to(device)
+                targets_batch = data["targets"].to(device)
+                token_type_id = data["token_type_id"].to(device)
+
+                outputs = model(ids, mask, token_type_id)
+                if model_name == "bart":
+                    outputs = outputs.logits
 
             loss = loss_fn(outputs, targets_batch)
             total_loss += loss.item()
