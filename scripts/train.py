@@ -3,6 +3,7 @@ import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import torch
+import random
 import pandas as pd
 import numpy as np
 import warnings
@@ -32,7 +33,7 @@ from peft import LoraModel, LoraConfig
 from datasets import Dataset
 from transformers.optimization import AdamW
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # Use GPU 1 (index 1)
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"  # Use GPU 1 (index 1)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -143,7 +144,7 @@ def fit(
     df_metrics = pd.DataFrame([])
 
     best_f1score = 0
-    patience = 20  # Number of epochs to wait for improvement
+    patience = 10  # Number of epochs to wait for improvement
     patience_counter = 0  # Counter for epochs without improvement
 
     for epoch in tqdm(range(epochs)):
@@ -205,12 +206,13 @@ def train(config, config_path):
     # Load dataset
     alpha_version = int(config_path.split('/')[-2].split('-')[-1][-1]) # 3, 4 or 5
     # /home/neemias/PerceptSent-LLM-approach/experiments/openai-modernbert-experiment-p2neg-alpha3/config.yaml
+    print(f"Caption LLM: {config_path.split('/')[-2].split('-')[0]}")
     if config_path.split('/')[-2].split('-')[0] == "openai":
         dataset_type = "gpt4-openai-classify" 
     elif config_path.split('/')[-2].split('-')[0] == "deepseek":
         dataset_type = "deepseek"
     else:
-        dataset_type = "percept_dataset"
+        dataset_type = "minigpt4-classify"
 
     experiment_group = config_path.split('/')[-2].split('-')[-2]  # Options: p5, p3, p2plus, p2neg
     print(f"Sigma version: {alpha_version} | experiment_problem: {experiment_group}")
@@ -224,6 +226,7 @@ def train(config, config_path):
 
     # train_val_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
     train_val_df = df.copy()
+    print(f"Number of labels: {len(df.sentiment.unique())}")
     train_params = {"batch_size": batch_size, "shuffle": True}
     val_params = {"batch_size": batch_size, "shuffle": True}
 
@@ -372,14 +375,32 @@ def train(config, config_path):
         llama3 = Llama3(model_path)
         model, tokenizer = llama3.get_model()
 
-        prompt = """What is the sentiment of this description? Please choose an answer from \
-            {"Positive": 1, "Negative": 0}"""
+        
 
         for fold, (train_idx, val_idx) in enumerate(kfold.split(train_val_df)):
             print(f"Fold {fold + 1}")
-
+             
             train_df = train_val_df.iloc[train_idx]
             val_df = train_val_df.iloc[val_idx]
+
+            class_size = train_df.sentiment.value_counts().sort_index().to_list()
+
+            if len(class_size) == 2 and experiment_group == "p2plus":
+                prompt = """What is the sentiment of this description? Please choose an answer from \
+                    {"Negative": 1, "Neutral": 0}
+                """
+            elif len(class_size) == 2 and experiment_group == "p2neg":
+                prompt = """What is the sentiment of this description? Please choose an answer from \
+                    {"Positive": 1, "Neutral": 0}
+                """
+            elif len(class_size) == 3:
+                prompt = """What is the sentiment of this description? Please choose an answer from \
+                    {"Positive": 2, "Negative": 0, "Neutral": 1}
+                """
+            else:
+                prompt = """What is the sentiment of this description? Please choose an answer from \
+                    {"Positive": 4, "SlightlyPositive": 3, "Neutral": 2, "SlightlyNegative": 1, "Negative": 0}
+                """
 
             train_df["input"] = train_df["text"]
             val_df["input"] = val_df["text"]
@@ -395,7 +416,11 @@ def train(config, config_path):
             )
 
             y_pred_temp = predict(val_df, model, tokenizer)
-
+            y_pred_temp = [
+                random.randint(0, len(class_size) - 1) if isinstance(x, str) else x
+                for x in y_pred_temp
+            ]
+            print(f"y_pred_temp: {y_pred_temp}")
             y_true_temp = val_df["sentiment"].tolist()
             y_pred = [pred for i, pred in enumerate(y_pred_temp) if isinstance(pred, int)]
             y_true = [y_true_temp[i] for i, pred in enumerate(y_pred_temp) if isinstance(pred, int)]
@@ -452,7 +477,36 @@ def train(config, config_path):
             )
 
             class_size = train_df.sentiment.value_counts().sort_index().to_list()
-            class_weights = torch.Tensor([1 / c for c in class_size]).type(torch.float).to(device)
+            print(f"Class size: {len(class_size)}")
+            # class_weights = torch.Tensor([1 / c for c in class_size]).type(torch.float).to(device)
+            if len(class_size) == 3:
+                class_weights = (
+                    torch.Tensor(
+                        [1 / class_size[0], 1 / class_size[1], 1 / class_size[2]]
+                    )
+                    .type(torch.float)
+                    .to(device)
+                )
+            elif len(class_size) == 2:
+                class_weights = (
+                    torch.Tensor([1 / class_size[0], 1 / class_size[1]])
+                    .type(torch.float)
+                    .to(device)
+                )
+            else:
+                class_weights = (
+                    torch.Tensor(
+                        [
+                            1 / class_size[0],
+                            1 / class_size[1],
+                            1 / class_size[2],
+                            1 / class_size[3],
+                            1 / class_size[4],
+                        ]
+                    )
+                    .type(torch.float)
+                    .to(device)
+                )
             # Initialize the BART-LARGE MNLI model
             model = BartForSequenceClassification.from_pretrained(
                 model_path,
@@ -461,6 +515,7 @@ def train(config, config_path):
             )
             tokenizer = BartTokenizerFast.from_pretrained(model_path)
             model.to(device)
+            print(model)
             # optimizer = torch.optim.AdamW(params=model.parameters(), lr=learning_rate, weight_decay=1e-6)
             optimizer = AdamW(
                 model.parameters(),

@@ -45,8 +45,6 @@ def load_experiment_data(alpha_version, dataset_type, experiment_group):
 
 
 def compute_loss(outputs, targets, loss_fn, model_name):
-    if model_name == "bart":
-        outputs = outputs.logits
     return loss_fn(outputs, targets)
 
 def train_one_epoch(model, train_dl, optimizer, loss_fn, device, model_name):
@@ -62,11 +60,15 @@ def train_one_epoch(model, train_dl, optimizer, loss_fn, device, model_name):
         
         optimizer.zero_grad()
         outputs = model(ids, mask, token_type_id)
+
+        if model_name == "bart":
+            outputs = outputs.logits
         loss = compute_loss(outputs, targets_batch, loss_fn, model_name)
         loss.backward()
         optimizer.step()
 
         total_loss += loss.item()
+        
         preds.extend(torch.argmax(outputs, axis=1).tolist())
         targets.extend(targets_batch.tolist())
     
@@ -85,6 +87,9 @@ def validate_one_epoch(model, val_dl, loss_fn, device, model_name):
             token_type_id = data["token_type_id"].to(device)
 
             outputs = model(ids, mask, token_type_id)
+
+            if model_name == "bart":
+                outputs = outputs.logits
             loss = compute_loss(outputs, targets_batch, loss_fn, model_name)
 
             total_loss += loss.item()
