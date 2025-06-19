@@ -31,7 +31,8 @@ from sklearn.model_selection import KFold, train_test_split
 from trl import SFTTrainer
 from peft import LoraModel, LoraConfig
 from datasets import Dataset
-from transformers.optimization import AdamW
+# from transformers.optimization import AdamW
+from torch.optim import AdamW
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"  # Use GPU 1 (index 1)
 
@@ -82,7 +83,9 @@ def train_llama_qlora(model, tokenizer, train_data, eval_data, log_dir, epochs, 
         gradient_checkpointing=True,
         eval_accumulation_steps=2,
     )
-
+    # from trl import SFTTrainer, SFTConfig
+    # # from transformers import TrainingArguments, DataCollatorForSeq2Seq
+    # from unsloth import is_bfloat16_supported
     trainer = SFTTrainer(
         model=model,
         train_dataset=train_data,
@@ -91,6 +94,25 @@ def train_llama_qlora(model, tokenizer, train_data, eval_data, log_dir, epochs, 
         dataset_text_field="text",
         tokenizer=tokenizer,
         args=training_arguments,
+        # args= SFTConfig(
+        #     per_device_train_batch_size=2,
+        #     gradient_accumulation_steps=4,
+        #     warmup_steps = 5,
+        #     num_train_epochs = 3, # Set this for 1 full training run.
+        #     #max_steps = 60,
+        #     learning_rate = 2e-4,
+        #     fp16 = not is_bfloat16_supported(),
+        #     bf16 = is_bfloat16_supported(),
+        #     optim = "adamw_8bit",
+        #     weight_decay = 0.01,
+        #     lr_scheduler_type = "linear",
+        #     seed = 3407,
+        #     output_dir = "model_traning_outputs",
+        #     report_to = "none",
+        #     max_seq_length = 2048,
+        #     dataset_num_proc = 4,
+        #     packing = False, # Can make training 5x faster for short sequences.
+        # ),
         packing=False,
         max_seq_length=max_len,
     )
@@ -132,6 +154,25 @@ def fit(
     device
 ):
     loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights, reduction="mean")
+
+    def freeze_backbone(model, head_names=("classifier", "score", "lm_head", "classification_head")):
+        """
+        Freezes all parameters in all sub-modules *except* those whose
+        top-level child name is in head_names.
+        
+        e.g. your `classifier`, or HF’s built-in `lm_head`, `score`, etc.
+        """
+        for child_name, child_module in model.named_children():
+            if child_name in head_names:
+                # leave your trainable head alone
+                continue
+            # freeze this entire sub-module
+            for p in child_module.parameters():
+                p.requires_grad = False
+    
+    if log_dir.split('/')[0] == "experiments-not-finetuning":
+        print("Backbone freeze")
+        freeze_backbone(model)
     
     # Set random seeds for reproducibility
     torch.manual_seed(42)
@@ -205,10 +246,15 @@ def train(config, config_path):
     name_arch = model_path.split("-")[0]
     # Load dataset
     alpha_version = int(config_path.split('/')[-2].split('-')[-1][-1]) # 3, 4 or 5
+    flag_twiter = False
     # /home/neemias/PerceptSent-LLM-approach/experiments/openai-modernbert-experiment-p2neg-alpha3/config.yaml
     print(f"Caption LLM: {config_path.split('/')[-2].split('-')[0]}")
+    print(f"Config path: {config_path}")
     if config_path.split('/')[-2].split('-')[0] == "openai":
         dataset_type = "gpt4-openai-classify" 
+        if config_path.split('/')[-3] == "experiments-twitter":
+            flag_twiter = True
+            print(f"Twitter dataset")
     elif config_path.split('/')[-2].split('-')[0] == "deepseek":
         dataset_type = "deepseek"
     else:
@@ -245,12 +291,21 @@ def train(config, config_path):
                     "sentiment": train_val_df["sentiment"].iloc[train_idx].to_list(),
                 }
             )
-            val_df = pd.DataFrame(
-                {
-                    "text": train_val_df["text"].iloc[val_idx].to_list(),
-                    "sentiment": train_val_df["sentiment"].iloc[val_idx].to_list(),
-                }
-            )
+            if not flag_twiter:
+                val_df = pd.DataFrame(
+                    {
+                        "text": train_val_df["text"].iloc[val_idx].to_list(),
+                        "sentiment": train_val_df["sentiment"].iloc[val_idx].to_list(),
+                    }
+                )
+            else:
+                if alpha_version == 5:
+                    val_df = pd.read_csv(f"/mnt/raid5/john/twitterdata/captions/captions_alpha5_limited.csv")[["text", "sentiment"]] # P5: 0, 1, 2, 3, 4 | P3: 0, 1, 2
+                elif alpha_version == 3:
+                    val_df = pd.read_csv(f"/mnt/raid5/john/twitterdata/captions/captions_alpha3_limited.csv")[["text", "sentiment"]] # P5: 0, 1, 2, 3, 4 | P3: 0, 1, 2
+
+                if experiment_group == "p2plus":
+                    val_df["sentiment"] = [1 if v == 0 else 0 for v in val_df["sentiment"]] 
 
             train_dl = data_loader(train_df, tokenizer, max_len, train_params)
             val_dl = data_loader(val_df, tokenizer, max_len, val_params)
@@ -281,15 +336,26 @@ def train(config, config_path):
             )
 
             df_metrics, y_pred, y_true = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device)
-            result_df = pd.DataFrame(
-                {
-                    "id": train_val_df["id"].iloc[val_idx].to_list(),
-                    "text": train_val_df["text"].iloc[val_idx].to_list(),
-                    "target": y_true,
-                    "prediction": y_pred
-                }
-            )
+            if not flag_twiter:
+                result_df = pd.DataFrame(
+                    {
+                        "id": train_val_df["id"].iloc[val_idx].to_list(),
+                        "text": train_val_df["text"].iloc[val_idx].to_list(),
+                        "target": y_true,
+                        "prediction": y_pred
+                    }
+                )
+            else:
+                result_df = pd.DataFrame(
+                    {
+                        "text": val_df["text"].to_list(),
+                        "target": val_df["sentiment"].to_list(),
+                        "prediction": y_pred
+                    }
+                )
             result_df.to_csv(os.path.join(log_dir, f"test_logs_{fold+1:02d}.csv"), index=False)
+            # if flag_twiter:
+            #     break
 
         mean_f1 = np.mean(df_metrics["f1_score"].to_numpy())
         confidence_interval = stats.t.interval(
@@ -326,13 +392,20 @@ def train(config, config_path):
                     "sentiment": train_val_df["sentiment"].iloc[train_idx].to_list(),
                 }
             )
-            val_df = pd.DataFrame(
-                {
-                    "text": train_val_df["text"].iloc[val_idx].to_list(),
-                    "sentiment": train_val_df["sentiment"].iloc[val_idx].to_list(),
-                }
-            )
-
+            if not flag_twiter:
+                val_df = pd.DataFrame(
+                    {
+                        "text": train_val_df["text"].iloc[val_idx].to_list(),
+                        "sentiment": train_val_df["sentiment"].iloc[val_idx].to_list(),
+                    }
+                )
+            else:
+                if alpha_version == 5:
+                    val_df = pd.read_csv(f"/mnt/raid5/john/twitterdata/captions/captions_alpha5_limited.csv")[["text", "sentiment"]] # P5: 0, 1, 2, 3, 4 | P3: 0, 1, 2
+                elif alpha_version == 3:
+                    val_df = pd.read_csv(f"/mnt/raid5/john/twitterdata/captions/captions_alpha3_limited.csv")[["text", "sentiment"]] # P5: 0, 1, 2, 3, 4 | P3: 0, 1, 2
+                if experiment_group == "p2plus":
+                    val_df["sentiment"] = [1 if v == 0 else 0 for v in val_df["sentiment"]]  
             class_size = train_df.sentiment.value_counts().sort_index().to_list()
             class_weights = torch.Tensor([1 / c for c in class_size]).type(torch.float).to(device)
 
@@ -349,15 +422,26 @@ def train(config, config_path):
             )
 
             df_metrics, y_pred, y_true = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device)
-            result_df = pd.DataFrame(
-                {
-                    "id": train_val_df["id"].iloc[val_idx].to_list(),
-                    "text": train_val_df["text"].iloc[val_idx].to_list(),
-                    "target": y_true,
-                    "prediction": y_pred
-                }
-            )
+            if not flag_twiter:
+                result_df = pd.DataFrame(
+                    {
+                        "id": train_val_df["id"].iloc[val_idx].to_list(),
+                        "text": train_val_df["text"].iloc[val_idx].to_list(),
+                        "target": y_true,
+                        "prediction": y_pred
+                    }
+                )
+            else:
+                result_df = pd.DataFrame(
+                    {
+                        "text": val_df["text"].to_list(),
+                        "target": val_df["sentiment"].to_list(),
+                        "prediction": y_pred
+                    }
+                )
             result_df.to_csv(os.path.join(log_dir, f"test_logs_{fold+1:02d}.csv"), index=False)
+            # if flag_twiter:
+            #     break
             del model
 
         mean_f1 = np.mean(df_metrics["f1_score"].to_numpy())
@@ -369,19 +453,26 @@ def train(config, config_path):
         print(f"Confidence Interval: {confidence_interval}")
 
     elif model_name == "llama-qlora":
+        os.environ["NCCL_P2P_DISABLE"] = "1"
+        os.environ["NCCL_IB_DISABLE"] = "1"
         kfold = KFold(n_splits=5, shuffle=True, random_state=42)
         df_metrics = pd.DataFrame([])
 
-        llama3 = Llama3(model_path)
-        model, tokenizer = llama3.get_model()
-
-        
-
         for fold, (train_idx, val_idx) in enumerate(kfold.split(train_val_df)):
             print(f"Fold {fold + 1}")
-             
+            llama3 = Llama3(model_path)
+            model, tokenizer = llama3.get_model()
             train_df = train_val_df.iloc[train_idx]
-            val_df = train_val_df.iloc[val_idx]
+            if not flag_twiter:
+                val_df = train_val_df.iloc[val_idx]
+            else:
+                if alpha_version == 5:
+                    val_df = pd.read_csv(f"/mnt/raid5/john/twitterdata/captions/captions_alpha5_limited.csv")[["text", "sentiment"]] # P5: 0, 1, 2, 3, 4 | P3: 0, 1, 2
+                elif alpha_version == 3:
+                    val_df = pd.read_csv(f"/mnt/raid5/john/twitterdata/captions/captions_alpha3_limited.csv")[["text", "sentiment"]] # P5: 0, 1, 2, 3, 4 | P3: 0, 1, 2
+                
+                if experiment_group == "p2plus":
+                    val_df["sentiment"] = [1 if v == 0 else 0 for v in val_df["sentiment"]]  
 
             class_size = train_df.sentiment.value_counts().sort_index().to_list()
 
@@ -437,15 +528,26 @@ def train(config, config_path):
             )
 
             df_metrics.to_csv(os.path.join(log_dir, "test_logs.csv"), index=False)
-            result_df = pd.DataFrame(
-                {
-                    "id": train_val_df["id"].iloc[val_idx].to_list(),
-                    "text": train_val_df["text"].iloc[val_idx].to_list(),
-                    "target": y_true,
-                    "prediction": y_pred
-                }
-            )
+            if not flag_twiter:
+                result_df = pd.DataFrame(
+                    {
+                        "id": train_val_df["id"].iloc[val_idx].to_list(),
+                        "text": train_val_df["text"].iloc[val_idx].to_list(),
+                        "target": y_true,
+                        "prediction": y_pred
+                    }
+                )
+            else:
+                result_df = pd.DataFrame(
+                    {
+                        "text": val_df["text"].to_list(),
+                        "target": val_df["sentiment"].to_list(),
+                        "prediction": y_pred
+                    }
+                )
             result_df.to_csv(os.path.join(log_dir, f"test_logs_{fold+1:02d}.csv"), index=False)
+            # if flag_twiter:
+            #     break
             
 
         mean_f1 = np.mean(df_metrics["f1_score"].to_numpy())
@@ -469,13 +571,21 @@ def train(config, config_path):
                     "sentiment": train_val_df["sentiment"].iloc[train_idx].to_list(),
                 }
             )
-            val_df = pd.DataFrame(
-                {
-                    "text": train_val_df["text"].iloc[val_idx].to_list(),
-                    "sentiment": train_val_df["sentiment"].iloc[val_idx].to_list(),
-                }
-            )
-
+            if not flag_twiter:
+                val_df = pd.DataFrame(
+                    {
+                        "text": train_val_df["text"].iloc[val_idx].to_list(),
+                        "sentiment": train_val_df["sentiment"].iloc[val_idx].to_list(),
+                    }
+                )
+            else:
+                if alpha_version == 5:
+                    val_df = pd.read_csv(f"/mnt/raid5/john/twitterdata/captions/captions_alpha5_limited.csv")[["text", "sentiment"]] # P5: 0, 1, 2, 3, 4 | P3: 0, 1, 2
+                elif alpha_version == 3:
+                    val_df = pd.read_csv(f"/mnt/raid5/john/twitterdata/captions/captions_alpha3_limited.csv")[["text", "sentiment"]] # P5: 0, 1, 2, 3, 4 | P3: 0, 1, 2
+                if experiment_group == "p2plus":
+                    val_df["sentiment"] = [1 if v == 0 else 0 for v in val_df["sentiment"]] 
+                
             class_size = train_df.sentiment.value_counts().sort_index().to_list()
             print(f"Class size: {len(class_size)}")
             # class_weights = torch.Tensor([1 / c for c in class_size]).type(torch.float).to(device)
@@ -536,16 +646,27 @@ def train(config, config_path):
                 device
             )
 
-            df_metrics, pred, target = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device)
-            result_df = pd.DataFrame(
-                {
-                    "id": train_val_df["id"].iloc[val_idx].to_list(),
-                    "text": train_val_df["text"].iloc[val_idx].to_list(),
-                    "target": target,
-                    "prediction": pred
-                }
-            )
+            df_metrics, y_pred, y_true = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device)
+            if not flag_twiter:
+                result_df = pd.DataFrame(
+                    {
+                        "id": train_val_df["id"].iloc[val_idx].to_list(),
+                        "text": train_val_df["text"].iloc[val_idx].to_list(),
+                        "target": y_true,
+                        "prediction": y_pred
+                    }
+                )
+            else:
+                result_df = pd.DataFrame(
+                    {
+                        "text": val_df["text"].to_list(),
+                        "target": val_df["sentiment"].to_list(),
+                        "prediction": y_pred
+                    }
+                )
             result_df.to_csv(os.path.join(log_dir, f"test_logs_{fold+1:02d}.csv"), index=False)
+            # if flag_twiter:
+            #     break
 
             del model
 

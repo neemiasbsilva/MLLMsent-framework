@@ -19,10 +19,12 @@ class DistilBERTModel(torch.nn.Module):
     def __init__(self, bert_path, class_size):
         super().__init__()
         self.distilbert = DistilBertModel.from_pretrained(bert_path)
+        # print(self.distilbert)
         self.classifier = torch.nn.Sequential(
-            torch.nn.Linear(768, 1024),
-            torch.nn.ReLU(),
-            torch.nn.Linear(1024, class_size),
+            torch.nn.Linear(768, class_size)
+            # torch.nn.Linear(768, 1024),
+            # torch.nn.ReLU(),
+            # torch.nn.Linear(1024, class_size),
         )
 
     def forward(self, ids, mask, token_type_id):
@@ -85,6 +87,7 @@ class Llama3:
             device_map="auto",
             quantization_config=bnb_config,
             trust_remote_code=True,
+            cache_dir="/mnt/raid5/neemias/cache-dir"
         )
 
         self.model.config.use_cache = False
@@ -93,6 +96,7 @@ class Llama3:
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_name,
             trust_remote_code=True,
+            cache_dir="/mnt/raid5/neemias/cache-dir"
         )
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.tokenizer.padding_side = "right"
@@ -124,9 +128,10 @@ class ModernBERTModel(torch.nn.Module):
 
         # Add a custom classifier on top of the pre-trained model for fine-tuning
         self.classifier = torch.nn.Sequential(
-            torch.nn.Linear(self.model.config.hidden_size, 1024),
-            torch.nn.ReLU(),
-            torch.nn.Linear(1024, class_size),
+            torch.nn.Linear(self.model.config.hidden_size, class_size)
+            # torch.nn.Linear(self.model.config.hidden_size, 1024),
+            # torch.nn.ReLU(),
+            # torch.nn.Linear(1024, class_size),
         )
 
     def forward(self, ids, mask, token_type_id=None):
