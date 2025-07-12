@@ -20,7 +20,26 @@ PerceptSent-LLM is a comprehensive research framework for sentiment analysis usi
    cd PerceptSent-LLM-approach
    ```
 
-2. **Install dependencies:**
+2. **Create checkpoints directory and download model weights:**
+   ```bash
+   mkdir checkpoints
+   ```
+   
+   Download pre-trained model weights from:
+   [Google Drive - PerceptSent-LLM Model Weights](https://drive.google.com/drive/u/0/folders/1eumPYLgpk7Gr71lG0j6MtgTpnfbhiBr9)
+   
+   The available checkpoints include:
+   - **OpenAI ModernBERT** variants (p3, p5, sigma5)
+   - **DeepSeek ModernBERT** variants (p3, p5, sigma5) 
+   - **OpenAI BART** variants (p5, sigma5)
+   - **DeepSeek BART** variants (p5, sigma5)
+   
+   Extract the downloaded `.pt.gz` files to the `checkpoints/` directory:
+   ```bash
+   gunzip checkpoints/*.pt.gz
+   ```
+
+3. **Install dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
