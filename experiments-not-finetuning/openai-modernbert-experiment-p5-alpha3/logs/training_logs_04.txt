@@ -1,3 +1,0 @@
-Epoch 1/1: 
-Train Loss: -1.0000, Accuracy: -1.0000, F1-score: -1.0000
-Validation Loss: 1.6593, Accuracy: 0.2090, F1-score: 0.1303

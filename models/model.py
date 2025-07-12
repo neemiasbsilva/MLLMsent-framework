@@ -128,10 +128,10 @@ class ModernBERTModel(torch.nn.Module):
 
         # Add a custom classifier on top of the pre-trained model for fine-tuning
         self.classifier = torch.nn.Sequential(
-            torch.nn.Linear(self.model.config.hidden_size, class_size)
-            # torch.nn.Linear(self.model.config.hidden_size, 1024),
-            # torch.nn.ReLU(),
-            # torch.nn.Linear(1024, class_size),
+            # torch.nn.Linear(self.model.config.hidden_size, class_size)
+            torch.nn.Linear(self.model.config.hidden_size, 1024),
+            torch.nn.ReLU(),
+            torch.nn.Linear(1024, class_size),
         )
 
     def forward(self, ids, mask, token_type_id=None):

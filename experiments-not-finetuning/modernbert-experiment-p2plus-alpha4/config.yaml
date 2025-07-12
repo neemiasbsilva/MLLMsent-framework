@@ -1,6 +1,6 @@
 experiment_name: "Experiment Using Modern BERT"
 learning_rate: 1e-3
-batch_size: 64
+batch_size: 512
 epochs: 100
 model_path: "answerdotai/ModernBERT-large"
 max_len: 512

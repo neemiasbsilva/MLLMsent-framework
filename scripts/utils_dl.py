@@ -1,4 +1,5 @@
 import os
+import time
 import pandas as pd
 import torch
 from sklearn.metrics import accuracy_score, f1_score
@@ -121,14 +122,14 @@ def compute_metrics(preds, targets):
     f1 = f1_score(targets, preds, average="weighted")
     return accuracy, f1
 
-def save_checkpoint(model, checkpoint_dir, name_arch, f1_val, best_f1score):
+def save_checkpoint(model, checkpoint_dir, name_arch, experiment_group, alpha_version, fine_tuning, f1_val, best_f1score):
     if f1_val > best_f1score:
         best_f1score = f1_val
         checkpoint_path = os.path.join(
-            checkpoint_dir, f"best_checkpoint_{name_arch.split('/')[0]}.pt"
+            checkpoint_dir, f"best_checkpoint_{name_arch.split('/')[0]}_{experiment_group}_sigma{alpha_version}_{fine_tuning}.pt"
         )
         torch.save(model.state_dict(), checkpoint_path)
-    return best_f1score
+    # return best_f1score
 
 def log_metrics(epoch, epochs, train_loss, train_accuracy, train_f1, val_loss, val_accuracy, val_f1, log_file):
     log_entry = (
@@ -144,7 +145,7 @@ def log_metrics(epoch, epochs, train_loss, train_accuracy, train_f1, val_loss, v
 def compute_val_loss_and_preds(model, dataloader, loss_fn, device, model_name):
     total_loss = 0.0
     preds, targets = [], []
-    
+    # print(f"Len dataloader: {len(dataloader)}")
     with torch.no_grad():
         for _, data in enumerate(dataloader):
             if model_name == "swin":
@@ -167,7 +168,6 @@ def compute_val_loss_and_preds(model, dataloader, loss_fn, device, model_name):
             total_loss += loss.item()
             preds.extend(torch.argmax(outputs, axis=1).tolist())
             targets.extend(targets_batch.tolist())
-    
     return total_loss, preds, targets
 
 def compute_val_metrics(preds, targets, total_loss, dataloader):
@@ -176,11 +176,12 @@ def compute_val_metrics(preds, targets, total_loss, dataloader):
     loss = total_loss / len(dataloader)
     return accuracy, f1, loss
 
-def update_metrics_df(df_metrics, kfold, accuracy, f1):
+def update_metrics_df(df_metrics, kfold, accuracy, f1, start_time):
     new_metrics = pd.DataFrame({
         "kfold": [kfold + 1],
         "accuracy": [accuracy],
-        "f1_score": [f1]
+        "f1_score": [f1],
+        "time": [int(time.time()-start_time)] 
     })
     df_metrics = pd.concat([df_metrics, new_metrics], axis=0)
     return df_metrics
