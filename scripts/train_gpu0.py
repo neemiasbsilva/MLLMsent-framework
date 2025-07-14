@@ -30,7 +30,8 @@ from torch.optim.lr_scheduler import ExponentialLR
 from sklearn.utils import class_weight
 from sklearn.model_selection import KFold, train_test_split
 from trl import SFTTrainer
-from peft import LoraModel, LoraConfig
+from peft import LoraConfig
+from transformers import EarlyStoppingCallback
 from datasets import Dataset
 # from transformers.optimization import AdamW
 from torch.optim import AdamW
@@ -59,19 +60,19 @@ def val(log_dir, model, dataloader, loss_fn, kfold, df_metrics, model_name, devi
     return df_metrics, preds, targets, f1
 
 
-def train_llama_qlora(model, tokenizer, train_data, eval_data, log_dir, epochs, batch_size, max_len):
+def train_llama_qlora(model, tokenizer, train_data, eval_data, log_dir, epochs, batch_size, max_len, save_file):
     """Train Llama QLoRA model."""
     peft_config = LoraConfig(
         lora_alpha=8, lora_dropout=0.1, r=32, bias="none", task_type="CAUSAL_LM"
     )
 
     training_arguments = TrainingArguments(
-        output_dir=log_dir,
+        output_dir=save_file,
         num_train_epochs=epochs,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=1,
         optim="paged_adamw_32bit",
-        save_steps=0,
+        save_strategy="epoch",
         logging_steps=25,
         learning_rate=2e-4,
         weight_decay=0.001,
@@ -86,6 +87,10 @@ def train_llama_qlora(model, tokenizer, train_data, eval_data, log_dir, epochs, 
         evaluation_strategy="epoch",
         gradient_checkpointing=True,
         eval_accumulation_steps=2,
+        # Early stopping configuration
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
     )
     # from trl import SFTTrainer, SFTConfig
     # # from transformers import TrainingArguments, DataCollatorForSeq2Seq
@@ -98,32 +103,14 @@ def train_llama_qlora(model, tokenizer, train_data, eval_data, log_dir, epochs, 
         dataset_text_field="text",
         tokenizer=tokenizer,
         args=training_arguments,
-        # args= SFTConfig(
-        #     per_device_train_batch_size=2,
-        #     gradient_accumulation_steps=4,
-        #     warmup_steps = 5,
-        #     num_train_epochs = 3, # Set this for 1 full training run.
-        #     #max_steps = 60,
-        #     learning_rate = 2e-4,
-        #     fp16 = not is_bfloat16_supported(),
-        #     bf16 = is_bfloat16_supported(),
-        #     optim = "adamw_8bit",
-        #     weight_decay = 0.01,
-        #     lr_scheduler_type = "linear",
-        #     seed = 3407,
-        #     output_dir = "model_traning_outputs",
-        #     report_to = "none",
-        #     max_seq_length = 2048,
-        #     dataset_num_proc = 4,
-        #     packing = False, # Can make training 5x faster for short sequences.
-        # ),
         packing=False,
         max_seq_length=max_len,
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=10)],
     )
 
     trainer.train()
-    output_dir = f"{log_dir}/results/trained_model"
-    trainer.save_model(output_dir)
+    # output_dir = f"{log_dir}/results/trained_model"
+    trainer.save_model(save_file)
     return model, tokenizer
 
 
@@ -483,6 +470,7 @@ def train(config, config_path):
 
         for fold, (train_idx, val_idx) in enumerate(kfold.split(train_val_df)):
             print(f"Fold {fold + 1}")
+            start_time = time.time()
             llama3 = Llama3(model_path)
             model, tokenizer = llama3.get_model()
             train_df = train_val_df.iloc[train_idx]
@@ -524,9 +512,14 @@ def train(config, config_path):
 
             train_data = Dataset.from_pandas(train_df)
             eval_data = Dataset.from_pandas(val_df)
-
+            fine_tuning = "finetuned" if log_dir.split('/')[0] else "not_finetuned"
+            name_arch = dataset_type+"_llamaqlora"
+            save_file = f"/home/neemias/PerceptSent-LLM-approach/checkpoints/llama/best_checkpoint_{name_arch}_{experiment_group}_sigma{alpha_version}_{fine_tuning}"
+            
+            
             model, tokenizer = train_llama_qlora(
-                model, tokenizer, train_data, eval_data, log_dir, epochs, batch_size, max_len
+                model, tokenizer, train_data, eval_data, log_dir, epochs, batch_size, max_len,
+                save_file
             )
 
             y_pred_temp = predict(val_df, model, tokenizer)
@@ -545,7 +538,7 @@ def train(config, config_path):
             df_metrics = pd.concat(
                 [
                     df_metrics,
-                    pd.DataFrame({"kfold": [fold + 1], "accuracy": [accuracy], "f1_score": [f1]}),
+                    pd.DataFrame({"kfold": [fold + 1], "accuracy": [accuracy], "f1_score": [f1], "time": [int(time.time()-start_time)]}),
                 ],
                 axis=0,
             )

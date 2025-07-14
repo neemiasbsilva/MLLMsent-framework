@@ -70,3 +70,6 @@ Validation Loss: 1.8537, Accuracy: 0.7148, F1-score: 0.7179
 Epoch 24/100: 
 Train Loss: 0.0059, Accuracy: 0.9978, F1-score: 0.9978
 Validation Loss: 1.9804, Accuracy: 0.7170, F1-score: 0.7214
+Epoch 25/100: 
+Train Loss: 0.0044, Accuracy: 0.9983, F1-score: 0.9983
+Validation Loss: 2.0931, Accuracy: 0.7159, F1-score: 0.7182
