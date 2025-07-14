@@ -1,8 +1,25 @@
 # PerceptSent-LLM Approach
 
+![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=for-the-badge&logo=PyTorch&logoColor=white)
+![Transformers](https://img.shields.io/badge/Transformers-%23FF6F00.svg?style=for-the-badge&logo=huggingface&logoColor=white)
+![Hugging Face](https://img.shields.io/badge/Hugging%20Face-%23FF6F00.svg?style=for-the-badge&logo=huggingface&logoColor=white)
+![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![CUDA](https://img.shields.io/badge/CUDA-%23076FC1.svg?style=for-the-badge&logo=nvidia&logoColor=white)
+![scikit-learn](https://img.shields.io/badge/scikit--learn-%23F7931E.svg?style=for-the-badge&logo=scikit-learn&logoColor=white)
+![Pandas](https://img.shields.io/badge/pandas-%23150458.svg?style=for-the-badge&logo=pandas&logoColor=white)
+![NumPy](https://img.shields.io/badge/numpy-%23013243.svg?style=for-the-badge&logo=numpy&logoColor=white)
+
 ## Overview
 
-PerceptSent-LLM is a comprehensive research framework for sentiment analysis using Large Language Models (LLMs) and modern NLP techniques. The framework provides tools for training, evaluating, and comparing various transformer-based models on perceptual sentiment datasets.
+PerceptSent-LLM is a comprehensive research framework for investigating sentiment reasoning capabilities of MultiModal Large Language Models (MLLMs). This repository provides a complete implementation for sentiment analysis from visual content, addressing the challenging problem of understanding how images communicate sentiment through complex, scene-level semantics.
+
+The framework implements three main approaches for sentiment analysis:
+
+1. **Direct sentiment classification** from images using MLLMs
+2. **Sentiment analysis on MLLM-generated captions** using pre-trained LLMs with only the final classification layer trained for sentiment polarity
+3. **Full fine-tuning** of the LLMs on sentiment-labeled captions
+
+This repository includes implementations of various transformer architectures (ModernBERT, BART, LLaMA, DistilBERT, Swin Transformer) and provides tools for both fine-tuning and non-fine-tuning experiments. The framework has demonstrated state-of-the-art performance, outperforming CNN- and Transformer-based baselines by up to 15% across different sentiment polarity categories.
 
 ### Key Features
 - End-to-end pipeline for sentiment analysis with LLMs
@@ -16,7 +33,7 @@ PerceptSent-LLM is a comprehensive research framework for sentiment analysis usi
 
 1. **Clone the repository:**
    ```bash
-   git clone <repo-url>
+   git clone https://github.com/neemiasbsilva/PerceptSent-LLM-approach.git
    cd PerceptSent-LLM-approach
    ```
 
@@ -48,20 +65,34 @@ PerceptSent-LLM is a comprehensive research framework for sentiment analysis usi
 
 ```
 PerceptSent-LLM-approach/
-├── data/                # Datasets and model outputs
-│   ├── gpt4-openai-classify/    # GPT-4 classifications
-│   ├── minigpt4-classify/       # MiniGPT-4 classifications
-│   └── deepseek-classify/       # DeepSeek VL-2 classifications
-├── models/              # Model architectures and utilities
-├── utils/               # Helper functions and tools
-├── experiments/         # Experiment configurations and results
-├── experiments-not-finetuning/  # Non-fine-tuning experiments
-├── experiments-swin/    # Swin Transformer experiments
-├── checkpoints/         # Model checkpoints
-├── scripts/            # Training and evaluation scripts
-├── notebooks/          # Analysis and prototyping notebooks
-├── reports/            # Results and visualizations
-└── requirements.txt    # Project dependencies
+├── data/                           # Datasets and model outputs
+│   ├── gpt4-openai-classify/       # GPT-4 classifications
+│   ├── gpt4-openai-only/           # GPT-4 only outputs
+│   ├── minigpt4-classify/          # MiniGPT-4 classifications
+│   ├── deepseek/                   # DeepSeek VL-2 outputs
+│   ├── percept_dataset/            # Perceptual sentiment dataset
+│   ├── twiter/                     # Twitter dataset
+│   ├── raw/                        # Raw data files
+│   ├── train/                      # Training data splits
+│   ├── test/                       # Test data splits
+│   └── validation/                 # Validation data splits
+├── models/                         # Model architectures and utilities
+├── utils/                          # Helper functions and tools
+├── experiments/                    # Main experiment configurations and results
+├── experiments-finetuning/         # Fine-tuning experiment results
+├── experiments-not-finetuning/     # Non-fine-tuning experiment results
+├── experiments-swin/               # Swin Transformer experiments
+├── experiments-twitter/            # Twitter-specific experiments
+├── checkpoints/                    # Model checkpoints
+├── scripts/                        # Training and evaluation scripts
+├── notebooks/                      # Analysis and prototyping notebooks
+├── reports/                        # Results and visualizations
+├── textaugment/                    # Text augmentation utilities
+├── envmodernbert/                  # ModernBERT environment
+├── run-*.sh                        # Execution scripts for different experiments
+├── requirements.txt                # Project dependencies
+├── pyproject.toml                  # Python project configuration
+└── uv.lock                         # Dependency lock file
 ```
 
 ## Data Structure
@@ -136,33 +167,27 @@ Located in `/data/deepseek-classify/`
    ```
 
 3. **Running experiments:**
+
+   **Fine-tuning experiments:**
    ```bash
-   ./run.sh
+   # BART fine-tuning
+   ./run-finetuning-bart.sh
+   
+   # ModernBERT fine-tuning
+   ./run-finetuning-modern-bert.sh
+   
+   # LLaMA fine-tuning
+   ./run-finetuning-llama.sh
    ```
 
-### Notebooks
-- `fine-tuning-llm-qlora.ipynb`: QLoRA fine-tuning
-- `zero-shot-bart-large-mnli.ipynb`: Zero-shot classification
-- `plot-results.ipynb`: Results visualization
-
-## Results
-
-### Performance Comparison
-
-| Type of dominance | Threshold (σ) | Classification Problem | Percept Sent Paper ResNet | GPT4-o mini + Vader | GPT4-o mini + Zero-shot BART-LARGE-MNLI | GPT4-o mini | GPT4-o mini + Fine-Tuning DISTIL-BERT | GPT4-o mini + Fine-Tuning BART-LARGE-MNLI | GPT4-o mini + Fine-Tuning LLAMA-3 (qLORA) | GPT4-o mini + Fine-Tuning ModernBERT |
-|-------------------|---------------|-----------------------|--------------------------|--------------------|----------------------------------------|-------------|---------------------------------------|-------------------------------------------|--------------------------------------------|-------------------------------------|
-| Simple            | σ = 3         | P5 (C=5)              | 45.00% [± 0.034]         | -                  | 48.25% [± 0.043]                       | 44.58% [± 0.031] | 56.74% [± 0.042]                  | 56.35% [± 0.039]                        | 59.45% [± 0.037]                         | 58.47% [± 0.04]                    |
-|                   |               | P3 (C=3)              | 61.00% [± 0.053]         | 5.27% [± 0.009]    | 67.64% [± 0.018]                       | 61.28% [± 0.029] | 76.44% [± 0.015]                  | 75.47% [± 0.012]                        | 77.53% [± 0.018]                         | 75.42% [± 0.02]                    |
-|                   |               | P2+ (C=2)             | 64.40% [± 0.062]         | 51.54% [± 0.019]   | 78.15% [± 0.013]                       | 72.63% [± 0.011] | 82.11% [± 0.006]                  | 82.33% [± 0.005]                        | 83.36% [± 0.014]                         | 83.05% [± 0.01]                    |
-|                   |               | P2- (C=2)             | 74.80% [± 0.050]         | 45.58% [± 0.023]   | 73.44% [± 0.019]                       | 82.84% [± 0.009] | 85.75% [± 0.014]                  | 82.53% [± 0.027]                        | 85.32% [± 0.009]                         | 85.03% [± 0.01]                    |
-| Qualified         | σ = 4         | P5 (C=5)              | 48.20% [± 0.089]         | -                  | 62.28% [± 0.029]                       | 50.06% [± 0.026] | 71.32% [± 0.028]                  | 69.75% [± 0.009]                        | 69.02% [± 0.023]                         | 72.26% [± 0.04]                    |
-|                   |               | P3 (C=3)              | 68.00% [± 0.052]         | 1.95% [± 0.003]    | 77.05% [± 0.016]                       | 70.53% [± 0.022] | 88.73% [± 0.013]                  | 87.79% [± 0.015]                        | 87.43% [± 0.016]                         | 88.16% [± 0.02]                    |
-|                   |               | P2+ (C=2)             | 76.60% [± 0.062]         | 56.21% [± 0.016]   | 84.83% [± 0.024]                       | 82.51% [± 0.023] | 90.48% [± 0.020]                  | 90.33% [± 0.010]                        | 90.94% [± 0.006]                         | 91.22% [± 0.01]                    |
-|                   |               | P2- (C=2)             | 84.00% [± 0.035]         | 47.86% [± 0.025]   | 78.81% [± 0.019]                       | 88.51% [± 0.012] | 92.04% [± 0.017]                  | 91.43% [± 0.018]                        | 91.63% [0.001]                            | 94.26% [± 0.01]                    |
-| Absolute          | σ = 5         | P5 (C=5)              | 51.20% [± 0.063]         | -                  | 78.49% [± 0.066]                       | 75.79% [± 0.047] | 83.17% [± 0.066]                  | 82.87% [± 0.089]                        | 83.68% [± 0.054]                         | 84.44% [± 0.03]                    |
-|                   |               | P3 (C=3)              | 69.00% [± 0.047]         | 0.40% [± 0.002]    | 84.67% [± 0.029]                       | 87.68% [± 0.018] | 95.53% [± 0.011]                  | 95.63% [± 0.017]                        | 92.70% [± 0.019]                         | 96.02% [± 0.01]                    |
-|                   |               | P2+ (C=2)             | 81.20% [± 0.054]         | 62.28% [± 0.035]   | 89.61% [± 0.018]                       | 85.51% [± 0.016] | 95.42% [± 0.013]                  | 95.47% [± 0.009]                        | 94.60% [± 0.006]                         | 95.90% [± 0.01]                    |
-|                   |               | P2- (C=2)             | 88.60% [± 0.011]         | 48.81% [± 0.050]   | 84.56% [± 0.022]                       | 93.77% [± 0.018] | 96.44% [± 0.012]                  | 96.33% [± 0.009]                        | 96.10% [0.0102]                            | 96.24% [± 0.01]                    |
+   **Non-fine-tuning experiments:**
+   ```bash
+   # BART non-fine-tuning
+   ./run-not-finetuning-bart.sh
+   
+   # ModernBERT non-fine-tuning
+   ./run-not-finetuning-modern-bert.sh
+   ```
 
 ## Contributing
 
@@ -174,11 +199,3 @@ If you use this repository in your research, please cite:
 ```
 [Add citation information here]
 ```
-
-## License
-
-[Add license information here]
-
-## Contact
-
-For questions or suggestions, please open an issue in the repository.

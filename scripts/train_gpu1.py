@@ -344,7 +344,7 @@ def train(config, config_path):
                 device
             )
 
-            df_metrics, y_pred, y_true, best_f1 = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device, start_time, best_f1)
+            df_metrics, y_pred, y_true, f1_val = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device, start_time)
             fine_tuning = "finetuned" if log_dir.split('/')[0] else "not_finetuned"
             name_arch = dataset_type+"_distilbert"
 
@@ -669,7 +669,7 @@ def train(config, config_path):
                 device
             )
 
-            df_metrics, y_pred, y_true = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device, start_time)
+            df_metrics, y_pred, y_true, f1_val = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device, start_time)
             fine_tuning = "finetuned" if log_dir.split('/')[0] else "not_finetuned"
             name_arch = dataset_type+"_bart"
 

@@ -344,9 +344,9 @@ def train(config, config_path):
                 device
             )
 
-            df_metrics, y_pred, y_true, best_f1 = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device, start_time, best_f1)
+            df_metrics, y_pred, y_true, f1_val = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device, start_time)
             fine_tuning = "finetuned" if log_dir.split('/')[0] else "not_finetuned"
-            name_arch = "distilbert"
+            name_arch = dataset_type+"_distilbert"
 
             if f1_val > best_f1:
                 save_checkpoint(model, checkpoint_dir, name_arch, experiment_group, alpha_version, fine_tuning, f1_val, best_f1)
@@ -438,7 +438,7 @@ def train(config, config_path):
 
             df_metrics, y_pred, y_true, f1_val = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device, start_time)
             fine_tuning = "finetuned" if log_dir.split('/')[0] else "not_finetuned"
-            name_arch = "modernbert"
+            name_arch = dataset_type+"_modernbert"
 
             if f1_val > best_f1:
                 save_checkpoint(model, checkpoint_dir, name_arch, experiment_group, alpha_version, fine_tuning, f1_val, best_f1)
@@ -671,7 +671,7 @@ def train(config, config_path):
 
             df_metrics, y_pred, y_true, f1_val = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device, start_time)
             fine_tuning = "finetuned" if log_dir.split('/')[0] else "not_finetuned"
-            name_arch = "bart"
+            name_arch = dataset_type+"_bart"
 
             if f1_val > best_f1:
                 save_checkpoint(model, checkpoint_dir, name_arch, experiment_group, alpha_version, fine_tuning, f1_val, best_f1)
