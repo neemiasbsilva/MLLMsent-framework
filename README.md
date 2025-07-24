@@ -9,193 +9,203 @@
 ![Pandas](https://img.shields.io/badge/pandas-%23150458.svg?style=for-the-badge&logo=pandas&logoColor=white)
 ![NumPy](https://img.shields.io/badge/numpy-%23013243.svg?style=for-the-badge&logo=numpy&logoColor=white)
 
+---
+
 ## Overview
 
-PerceptSent-LLM is a comprehensive research framework for investigating sentiment reasoning capabilities of MultiModal Large Language Models (MLLMs). This repository provides a complete implementation for sentiment analysis from visual content, addressing the challenging problem of understanding how images communicate sentiment through complex, scene-level semantics.
+**PerceptSent-LLM** is a research framework for investigating sentiment reasoning in MultiModal Large Language Models (MLLMs). It provides end-to-end tools for sentiment analysis from visual content, focusing on how images communicate sentiment through complex, scene-level semantics.
 
-The framework implements three main approaches for sentiment analysis:
+- **Direct sentiment classification** from images using MLLMs
+- **Sentiment analysis on MLLM-generated captions** using pre-trained LLMs (with only the final classification layer trained)
+- **Full fine-tuning** of LLMs on sentiment-labeled captions
 
-1. **Direct sentiment classification** from images using MLLMs
-2. **Sentiment analysis on MLLM-generated captions** using pre-trained LLMs with only the final classification layer trained for sentiment polarity
-3. **Full fine-tuning** of the LLMs on sentiment-labeled captions
-
-This repository includes implementations of various transformer architectures (ModernBERT, BART, LLaMA, DistilBERT, Swin Transformer) and provides tools for both fine-tuning and non-fine-tuning experiments. The framework has demonstrated state-of-the-art performance, outperforming CNN- and Transformer-based baselines by up to 15% across different sentiment polarity categories.
+The framework supports multiple transformer architectures (ModernBERT, BART, LLaMA, DistilBERT, Swin Transformer) and both fine-tuning and non-fine-tuning experiments. It achieves state-of-the-art performance, outperforming CNN/Transformer baselines by up to 15% across sentiment categories.
 
 ### Key Features
 - End-to-end pipeline for sentiment analysis with LLMs
 - Support for multiple transformer architectures and training strategies
 - Fine-tuning with qLORA and quantization
-- Zero-shot and few-shot evaluation capabilities
+- Zero-shot and few-shot evaluation
 - Comprehensive experiment tracking and reproducibility
-- Modular codebase for easy extension
+- Modular, extensible codebase
 
-## Installation
+---
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/neemiasbsilva/PerceptSent-LLM-approach.git
-   cd PerceptSent-LLM-approach
-   ```
+## Quickstart
 
-2. **Create checkpoints directory and download model weights:**
-   ```bash
-   mkdir checkpoints
-   ```
-   
-   Download pre-trained model weights from:
-   [Google Drive - PerceptSent-LLM Model Weights](https://drive.google.com/drive/u/0/folders/1eumPYLgpk7Gr71lG0j6MtgTpnfbhiBr9)
-   
-   The available checkpoints include:
-   - **OpenAI ModernBERT** variants (p3, p5, sigma5)
-   - **DeepSeek ModernBERT** variants (p3, p5, sigma5) 
-   - **OpenAI BART** variants (p5, sigma5)
-   - **DeepSeek BART** variants (p5, sigma5)
-   
-   Extract the downloaded `.pt.gz` files to the `checkpoints/` directory:
-   ```bash
-   gunzip checkpoints/*.pt.gz
-   ```
+```bash
+# Clone the repository
+$ git clone https://github.com/neemiasbsilva/PerceptSent-LLM-approach.git
+$ cd PerceptSent-LLM-approach
 
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+# Create checkpoints directory and download model weights
+$ mkdir checkpoints
+# Download weights from:
+# https://drive.google.com/drive/u/0/folders/1eumPYLgpk7Gr71lG0j6MtgTpnfbhiBr9
+# Extract with:
+$ gunzip checkpoints/*.pt.gz
+
+# Install dependencies (Python >=3.10 required)
+$ pip install -r requirements.txt
+# or, for modern Python projects:
+$ pip install .
+```
+
+---
 
 ## Project Structure
 
 ```
 PerceptSent-LLM-approach/
-├── data/                           # Datasets and model outputs
-│   ├── gpt4-openai-classify/       # GPT-4 classifications
-│   ├── gpt4-openai-only/           # GPT-4 only outputs
-│   ├── minigpt4-classify/          # MiniGPT-4 classifications
-│   ├── deepseek/                   # DeepSeek VL-2 outputs
-│   ├── percept_dataset/            # Perceptual sentiment dataset
-│   ├── twiter/                     # Twitter dataset
-│   ├── raw/                        # Raw data files
-│   ├── train/                      # Training data splits
-│   ├── test/                       # Test data splits
-│   └── validation/                 # Validation data splits
-├── models/                         # Model architectures and utilities
-├── utils/                          # Helper functions and tools
-├── experiments/                    # Main experiment configurations and results
-├── experiments-finetuning/         # Fine-tuning experiment results
-├── experiments-not-finetuning/     # Non-fine-tuning experiment results
-├── experiments-swin/               # Swin Transformer experiments
-├── experiments-twitter/            # Twitter-specific experiments
-├── checkpoints/                    # Model checkpoints
-├── scripts/                        # Training and evaluation scripts
-├── notebooks/                      # Analysis and prototyping notebooks
-├── reports/                        # Results and visualizations
-├── textaugment/                    # Text augmentation utilities
-├── envmodernbert/                  # ModernBERT environment
-├── run-*.sh                        # Execution scripts for different experiments
-├── requirements.txt                # Project dependencies
-├── pyproject.toml                  # Python project configuration
-└── uv.lock                         # Dependency lock file
+├── data/                 # Datasets and model outputs
+├── models/               # Model architectures and utilities
+├── utils/                # Helper functions and tools
+├── experiments-finetuning/      # Fine-tuning experiment configs/results
+├── experiments-not-finetuning/  # Non-fine-tuning experiment configs/results
+├── experiments-swin/     # Swin Transformer experiments
+├── experiments-twitter/  # Twitter-specific experiments
+├── checkpoints/          # Model checkpoints
+├── scripts/              # Training, evaluation, and inference scripts
+├── notebooks/            # Analysis and prototyping notebooks
+├── reports/              # Results and visualizations
+├── textaugment/          # Text augmentation utilities
+├── envmodernbert/        # ModernBERT environment
+├── run-*.sh              # Shell scripts for experiments
+├── requirements.txt      # Python dependencies
+├── pyproject.toml        # Python project config (PEP 621)
+└── uv.lock               # Dependency lock file
 ```
+
+---
+
+## Configuration
+
+Experiments are configured via YAML files (see `experiments-finetuning/` and `experiments-not-finetuning/`). Example config:
+
+```yaml
+experiment_name: "Experiment using LLama3 Finetuning with QlORA"
+learning_rate: 1e-5
+batch_size: 4
+epochs: 100
+model_path: "nvidia/Llama3-ChatQA-1.5-8B"
+model_name: "llama-qlora"
+max_len: 1024
+log_dir: "experiments-finetuning/llama3-qlora-p3-alpha3/logs"
+checkpoint_dir: "checkpoints"
+```
+
+- **experiment_name**: Name of the experiment
+- **learning_rate**: Learning rate for training
+- **batch_size**: Batch size
+- **epochs**: Number of epochs
+- **model_path**: HuggingFace model path or identifier
+- **model_name**: Model type (e.g., "llama-qlora", "modern-bert", "bart", "distil-bert")
+- **max_len**: Max sequence length
+- **log_dir**: Directory for logs
+- **checkpoint_dir**: Directory for saving checkpoints
+
+---
+
+## Training & Evaluation
+
+### Training
+
+```bash
+python scripts/train_gpu0.py --config <path-to-config.yaml>
+# or
+python scripts/train_gpu1.py --config <path-to-config.yaml>
+# or (for Swin Transformer)
+python scripts/swin_train.py --config <path-to-config.yaml>
+```
+
+### Evaluation
+
+```bash
+python scripts/evaluate.py --config <path-to-config.yaml>
+```
+
+### Running Experiments (Shell Scripts)
+
+```bash
+# Fine-tuning
+./run-finetuning-bart.sh
+./run-finetuning-modern-bert.sh
+./run-finetuning-llama.sh
+
+# Non-fine-tuning
+./run-not-finetune-bart.sh
+./run-not-finetune-modern-bert.sh
+```
+
+---
+
+## Inference
+
+See [`scripts/README_inference.md`](scripts/README_inference.md) for full details.
+
+**Quick Start:**
+
+```bash
+# List available checkpoints
+python scripts/run_inference.py --list
+
+# Run inference (recommended)
+python scripts/run_inference.py \
+    --checkpoint checkpoints/best_checkpoint_gpt4-openai-classify_bart_p5_sigma3_finetuned.pt \
+    --input your_data.csv \
+    --output predictions.csv
+
+# Or use the main script directly
+python scripts/inference.py \
+    --model_name bart \
+    --checkpoint_path checkpoints/best_checkpoint_gpt4-openai-classify_bart_p5_sigma3_finetuned.pt \
+    --model_path facebook/bart-large-mnli \
+    --input_file your_data.csv \
+    --output_file predictions.csv \
+    --num_classes 5 \
+    --batch_size 32 \
+    --max_len 512
+```
+
+- Input CSV must have a `text` column (or specify with `--text_column`)
+- Output CSV will have a new `prediction` column
+- See the [inference README](scripts/README_inference.md) for model-specific details and troubleshooting
+
+---
 
 ## Data Structure
 
-### Model Classifications
+- `data/` contains all datasets and model outputs, including:
+  - `gpt4-openai-classify/`, `minigpt4-classify/`, `deepseek/`, etc.
+  - `percept_dataset/`, `twiter/`, `raw/`, `train/`, `test/`, `validation/`
 
-#### GPT-4 OpenAI Classifications
-Located in `/data/gpt4-openai-classify/`
-- Alpha values: 3, 4, 5
-- Prompt types:
-  - p2neg: Negative prompt type 2
-  - p2plus: Positive prompt type 2
-  - p3: Prompt type 3
-  - p5: Prompt type 5
+---
 
-#### MiniGPT-4 Classifications
-Located in `/data/minigpt4-classify/`
-- Sigma values: 3, 4, 5
-- Prompt types: p2neg, p2plus, p3, p5
+## Notebooks
 
-#### DeepSeek VL-2 Classifications
-Located in `/data/deepseek-classify/`
-- Sigma values: 3, 4, 5
-- Prompt types: p2neg, p2plus, p3, p5
+- Prototyping, analysis, and visualization notebooks are in `notebooks/`.
+- Example: `plot-results.ipynb`, `fine-tuning-llm-qlora.ipynb`, `vader.ipynb`, etc.
 
-## Experimental Setup
-
-### Model Variants
-
-#### ModernBERT Experiments
-- OpenAI and DeepSeek variants
-- Alpha values: 3, 4, 5
-- Prompt types: p2neg, p2plus, p3, p5
-
-#### BART Experiments
-- Zero-shot BART
-- DeepSeek BART variants
-- Alpha values: 3, 4, 5
-- Prompt types: p2neg, p2plus, p3, p5
-
-#### LLaMA3 QLoRA Experiments
-- OpenAI and DeepSeek variants
-- Alpha values: 3, 4, 5
-- Prompt types: p2neg, p2plus, p3, p5
-
-#### DistilBERT Experiments
-- OpenAI and DeepSeek variants
-- Alpha values: 3, 4, 5
-- Prompt types: p2neg, p2plus, p3, p5
-
-#### Swin Transformer Experiments
-- OpenAI variants
-- Alpha values: 3, 5
-- Prompt types: p3, p5
-
-### Additional Experiments
-- VADER sentiment analysis
-- Text augmentation studies
-
-## Usage
-
-### Training & Evaluation
-
-1. **Training a model:**
-   ```bash
-   python scripts/train.py --config <path-to-config.yaml>
-   ```
-
-2. **Evaluating a model:**
-   ```bash
-   python scripts/evaluate.py
-   ```
-
-3. **Running experiments:**
-
-   **Fine-tuning experiments:**
-   ```bash
-   # BART fine-tuning
-   ./run-finetuning-bart.sh
-   
-   # ModernBERT fine-tuning
-   ./run-finetuning-modern-bert.sh
-   
-   # LLaMA fine-tuning
-   ./run-finetuning-llama.sh
-   ```
-
-   **Non-fine-tuning experiments:**
-   ```bash
-   # BART non-fine-tuning
-   ./run-not-finetuning-bart.sh
-   
-   # ModernBERT non-fine-tuning
-   ./run-not-finetuning-modern-bert.sh
-   ```
+---
 
 ## Contributing
 
-We welcome contributions! Please feel free to submit a Pull Request.
+Contributions are welcome! Please open an issue or submit a pull request. For major changes, please open an issue first to discuss what you would like to change.
+
+---
 
 ## Citation
 
 If you use this repository in your research, please cite:
+
 ```
 [Add citation information here]
 ```
+
+---
+
+## License
+
+[MIT License](LICENSE)
+
+---
