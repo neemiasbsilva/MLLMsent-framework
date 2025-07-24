@@ -1,9 +1,0 @@
-experiment_name: "Experiment Using: Cutting-Edge Natural Language Processing for Social Media (Few-shot learning)"
-learning_rate: 5e-5
-batch_size: 8
-epochs: 100
-model_path: "cardiffnlp/twitter-roberta-base-sentiment-latest"
-max_len: 512
-model_name: "distil-bert"
-log_dir: "experiments/experiment4/logs"
-checkpoint_dir: "checkpoints"
