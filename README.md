@@ -85,7 +85,7 @@ Experiments are configured via YAML files (see `experiments-finetuning/` and `ex
 ```yaml
 experiment_name: "Experiment using LLama3 Finetuning with QlORA"
 learning_rate: 1e-5
-batch_size: 4
+batch_size: 8
 epochs: 100
 model_path: "nvidia/Llama3-ChatQA-1.5-8B"
 model_name: "llama-qlora"
