@@ -5,5 +5,5 @@ epochs: 100
 model_path: "answerdotai/ModernBERT-large"
 max_len: 512
 model_name: "modern-bert"
-log_dir: "experiments-finetuning/deepseek-modernbert-experiment-p3-alpha3/logs"
+log_dir: "experiments-finetuning/modernbert-experiment-p3-alpha3/logs"
 checkpoint_dir: "checkpoints"

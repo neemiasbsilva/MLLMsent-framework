@@ -5,5 +5,5 @@ epochs: 100
 model_path: "facebook/bart-large-mnli"
 max_len: 512
 model_name: "bart"
-log_dir: "experiments-finetuning/bart-experiment-p5-alpha3/logs"
+log_dir: "experiments-finetuning/bart-experiment-p3-alpha3/logs"
 checkpoint_dir: "checkpoints"
