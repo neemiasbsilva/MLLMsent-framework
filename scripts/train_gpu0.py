@@ -164,7 +164,7 @@ def fit(
     patience = 10
     if log_dir.split('/')[0] == "experiments-not-finetuning":
         print("Backbone freeze")
-        patience = 50
+        patience = 25
         freeze_backbone(model)
     # Set random seeds for reproducibility
     torch.manual_seed(42)
@@ -332,7 +332,7 @@ def train(config, config_path):
             )
 
             df_metrics, y_pred, y_true, f1_val = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device, start_time)
-            fine_tuning = "finetuned" if log_dir.split('/')[0] else "not_finetuned"
+            fine_tuning = "finetuned" if log_dir.split('/')[0] != "experiments-not-finetuning" else "not_finetuned"
             name_arch = dataset_type+"_distilbert"
 
             if f1_val > best_f1:
@@ -424,7 +424,7 @@ def train(config, config_path):
             )
 
             df_metrics, y_pred, y_true, f1_val = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device, start_time)
-            fine_tuning = "finetuned" if log_dir.split('/')[0] else "not_finetuned"
+            fine_tuning = "finetuned" if log_dir.split('/')[0] != "experiments-not-finetuning" else "not_finetuned"
             name_arch = dataset_type+"_modernbert"
 
             if f1_val > best_f1:
@@ -466,101 +466,140 @@ def train(config, config_path):
         os.environ["NCCL_P2P_DISABLE"] = "1"
         os.environ["NCCL_IB_DISABLE"] = "1"
         kfold = KFold(n_splits=5, shuffle=True, random_state=42)
-        df_metrics = pd.DataFrame([])
+        df_metrics = pd.read_csv(os.path.join(log_dir, "test_logs.csv"))
+        if (len(df_metrics) == 0 or log_dir.split('/')[0] == "experiments-not-finetuning"):
+            df_metrics = pd.DataFrame([])
 
         for fold, (train_idx, val_idx) in enumerate(kfold.split(train_val_df)):
             print(f"Fold {fold + 1}")
-            start_time = time.time()
-            llama3 = Llama3(model_path)
-            model, tokenizer = llama3.get_model()
-            train_df = train_val_df.iloc[train_idx]
-            if not flag_twiter:
-                val_df = train_val_df.iloc[val_idx]
+            if (fold+1 <= len(df_metrics) and log_dir.split('/')[0] == "experiments-finetuning"):
+                print(f"Fold {fold+1} just have logged")
             else:
-                if alpha_version == 5:
-                    val_df = pd.read_csv(f"/mnt/raid5/john/twitterdata/captions/captions_alpha5_limited.csv")[["text", "sentiment"]] # P5: 0, 1, 2, 3, 4 | P3: 0, 1, 2
-                elif alpha_version == 3:
-                    val_df = pd.read_csv(f"/mnt/raid5/john/twitterdata/captions/captions_alpha3_limited.csv")[["text", "sentiment"]] # P5: 0, 1, 2, 3, 4 | P3: 0, 1, 2
+                start_time = time.time()
+                llama3 = Llama3(model_path)
+                model, tokenizer = llama3.get_model()
+                train_df = train_val_df.iloc[train_idx]
+                if not flag_twiter:
+                    val_df = train_val_df.iloc[val_idx]
+                else:
+                    if alpha_version == 5:
+                        val_df = pd.read_csv(f"/mnt/raid5/john/twitterdata/captions/captions_alpha5_limited.csv")[["text", "sentiment"]] # P5: 0, 1, 2, 3, 4 | P3: 0, 1, 2
+                    elif alpha_version == 3:
+                        val_df = pd.read_csv(f"/mnt/raid5/john/twitterdata/captions/captions_alpha3_limited.csv")[["text", "sentiment"]] # P5: 0, 1, 2, 3, 4 | P3: 0, 1, 2
+                    
+                    if experiment_group == "p2plus":
+                        val_df["sentiment"] = [1 if v == 0 else 0 for v in val_df["sentiment"]]  
+
+                class_size = train_df.sentiment.value_counts().sort_index().to_list()
+
+                if len(class_size) == 2 and experiment_group == "p2plus":
+                    prompt = """What is the sentiment of this description? Please choose an answer from \
+                        {"Negative": 1, "Neutral": 0}
+                    """
+                elif len(class_size) == 2 and experiment_group == "p2neg":
+                    prompt = """What is the sentiment of this description? Please choose an answer from \
+                        {"Positive": 1, "Neutral": 0}
+                    """
+                elif len(class_size) == 3:
+                    prompt = """What is the sentiment of this description? Please choose an answer from \
+                        {"Positive": 2, "Negative": 0, "Neutral": 1}
+                    """
+                else:
+                    prompt = """What is the sentiment of this description? Please choose an answer from \
+                        {"Positive": 4, "SlightlyPositive": 3, "Neutral": 2, "SlightlyNegative": 1, "Negative": 0}
+                    """
+
+                        
+
+                train_df["input"] = train_df["text"]
+                val_df["input"] = val_df["text"]
+
+                train_df["text"] = train_df.apply(lambda x: f"{prompt}{x['text']}={x['sentiment']}", axis=1)
+                if log_dir.split('/')[0] == "experiments-finetuning":
+                    val_df["text"] = val_df.apply(lambda x: f"{prompt}{x['text']}=", axis=1)
+                else:
+                    n_few_shot = 15
+
+                    few_shot_samples = train_df.head(n_few_shot)
+
+                    few_shot_header = "\n\n".join([
+                        f"{prompt}{row['text']}={row['sentiment']}"
+                        for index, row in few_shot_samples.iterrows()
+                    ])
+
+                    val_df["text"] = val_df.apply(
+                        lambda x: f"{few_shot_header}\n\n{prompt}{x['text']}=",
+                        axis=1
+                    )
+                train_data = Dataset.from_pandas(train_df)
+                eval_data = Dataset.from_pandas(val_df)
+                fine_tuning = "finetuned" if log_dir.split('/')[0] == "experiments-finetuning" else "not_finetuned"
+                name_arch = dataset_type+"_llamaqlora"
+                save_file = f"/home/neemias/PerceptSent-LLM-approach/checkpoints/llama/best_checkpoint_{name_arch}_{experiment_group}_sigma{alpha_version}_{fine_tuning}"
                 
-                if experiment_group == "p2plus":
-                    val_df["sentiment"] = [1 if v == 0 else 0 for v in val_df["sentiment"]]  
+                if fine_tuning == "finetuned":
+                    model, tokenizer = train_llama_qlora(
+                        model, tokenizer, train_data, eval_data, log_dir, epochs, batch_size, max_len,
+                        save_file
+                    )
 
-            class_size = train_df.sentiment.value_counts().sort_index().to_list()
+                y_pred_temp = predict(val_df, model, tokenizer)
+                
+                # print(f"y_pred_temp: {y_pred_temp}")
+                y_true_temp = val_df["sentiment"].tolist()
+                print(f"Size of y_pred_temp: {len(y_pred_temp)} | Size of y_true_temp: {len(y_true_temp)}")
+                
+                # Process predictions: convert to int if possible, otherwise assign wrong label
+                y_pred = []
+                y_true = []
+                for i, (pred, true_val) in enumerate(zip(y_pred_temp, y_true_temp)):
+                    try:
+                        # Try to convert prediction to integer
+                        pred_int = int(pred)
+                        y_pred.append(pred_int)
+                        y_true.append(true_val)
+                    except (ValueError, TypeError):
+                        # If conversion fails, assign a wrong label (opposite of true label)
+                        if len(class_size) == 2:
+                            # For binary classification, assign opposite label
+                            wrong_label = 1 if true_val == 0 else 0
+                        else:
+                            # For multi-class, assign a different label
+                            wrong_label = (true_val + 1) % len(class_size)
+                        y_pred.append(wrong_label)
+                        y_true.append(true_val)
+                # y_pred = [pred for i, pred in enumerate(y_pred_temp) if isinstance(pred, int)]
+                # y_true = [y_true_temp[i] for i, pred in enumerate(y_pred_temp) if isinstance(pred, int)]
 
-            if len(class_size) == 2 and experiment_group == "p2plus":
-                prompt = """What is the sentiment of this description? Please choose an answer from \
-                    {"Negative": 1, "Neutral": 0}
-                """
-            elif len(class_size) == 2 and experiment_group == "p2neg":
-                prompt = """What is the sentiment of this description? Please choose an answer from \
-                    {"Positive": 1, "Neutral": 0}
-                """
-            elif len(class_size) == 3:
-                prompt = """What is the sentiment of this description? Please choose an answer from \
-                    {"Positive": 2, "Negative": 0, "Neutral": 1}
-                """
-            else:
-                prompt = """What is the sentiment of this description? Please choose an answer from \
-                    {"Positive": 4, "SlightlyPositive": 3, "Neutral": 2, "SlightlyNegative": 1, "Negative": 0}
-                """
+                accuracy = accuracy_score(y_true, y_pred)
+                f1 = f1_score(y_true, y_pred, average="weighted")
 
-            train_df["input"] = train_df["text"]
-            val_df["input"] = val_df["text"]
-
-            train_df["text"] = train_df.apply(lambda x: f"{prompt}{x['text']}={x['sentiment']}", axis=1)
-            val_df["text"] = val_df.apply(lambda x: f"{prompt}{x['text']}=", axis=1)
-
-            train_data = Dataset.from_pandas(train_df)
-            eval_data = Dataset.from_pandas(val_df)
-            fine_tuning = "finetuned" if log_dir.split('/')[0] else "not_finetuned"
-            name_arch = dataset_type+"_llamaqlora"
-            save_file = f"/home/neemias/PerceptSent-LLM-approach/checkpoints/llama/best_checkpoint_{name_arch}_{experiment_group}_sigma{alpha_version}_{fine_tuning}"
-            
-            
-            model, tokenizer = train_llama_qlora(
-                model, tokenizer, train_data, eval_data, log_dir, epochs, batch_size, max_len,
-                save_file
-            )
-
-            y_pred_temp = predict(val_df, model, tokenizer)
-            y_pred_temp = [
-                random.randint(0, len(class_size) - 1) if isinstance(x, str) else x
-                for x in y_pred_temp
-            ]
-            print(f"y_pred_temp: {y_pred_temp}")
-            y_true_temp = val_df["sentiment"].tolist()
-            y_pred = [pred for i, pred in enumerate(y_pred_temp) if isinstance(pred, int)]
-            y_true = [y_true_temp[i] for i, pred in enumerate(y_pred_temp) if isinstance(pred, int)]
-
-            accuracy = accuracy_score(y_true, y_pred)
-            f1 = f1_score(y_true, y_pred, average="weighted")
-
-            df_metrics = pd.concat(
-                [
-                    df_metrics,
-                    pd.DataFrame({"kfold": [fold + 1], "accuracy": [accuracy], "f1_score": [f1], "time": [int(time.time()-start_time)]}),
-                ],
-                axis=0,
-            )
-            df_metrics.to_csv(os.path.join(log_dir, "test_logs.csv"), index=False)
-            if not flag_twiter:
-                result_df = pd.DataFrame(
-                    {
-                        "id": train_val_df["id"].iloc[val_idx].to_list(),
-                        "text": train_val_df["text"].iloc[val_idx].to_list(),
-                        "target": y_true,
-                        "prediction": y_pred
-                    }
+                df_metrics = pd.concat(
+                    [
+                        df_metrics,
+                        pd.DataFrame({"kfold": [fold + 1], "accuracy": [accuracy], "f1_score": [f1], "time": [int(time.time()-start_time)]}),
+                    ],
+                    axis=0,
                 )
-            else:
-                result_df = pd.DataFrame(
-                    {
-                        "text": val_df["text"].to_list(),
-                        "target": val_df["sentiment"].to_list(),
-                        "prediction": y_pred
-                    }
-                )
-            result_df.to_csv(os.path.join(log_dir, f"test_logs_{fold+1:02d}.csv"), index=False)
+                df_metrics.to_csv(os.path.join(log_dir, "test_logs.csv"), index=False)
+                if not flag_twiter:
+                    result_df = pd.DataFrame(
+                        {
+                            "id": train_val_df["id"].iloc[val_idx].to_list(),
+                            "text": train_val_df["text"].iloc[val_idx].to_list(),
+                            "target": y_true,
+                            "prediction": y_pred
+                        }
+                    )
+                else:
+                    result_df = pd.DataFrame(
+                        {
+                            "text": val_df["text"].to_list(),
+                            "target": val_df["sentiment"].to_list(),
+                            "prediction": y_pred
+                        }
+                    )
+                result_df.to_csv(os.path.join(log_dir, f"test_logs_{fold+1:02d}.csv"), index=False)
             # if flag_twiter:
             #     break
             
@@ -663,7 +702,7 @@ def train(config, config_path):
             )
 
             df_metrics, y_pred, y_true, f1_val = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device, start_time)
-            fine_tuning = "finetuned" if log_dir.split('/')[0] else "not_finetuned"
+            fine_tuning = "finetuned" if log_dir.split('/')[0] != "experiments-not-finetuning" else "not_finetuned"
             name_arch = dataset_type+"_bart"
 
             if f1_val > best_f1:
