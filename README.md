@@ -46,8 +46,8 @@ TODO
 
 ```bash
 # Clone the repository
-$ git clone https://github.com/neemiasbsilva/PerceptSent-LLM-approach.git
-$ cd PerceptSent-LLM-approach
+$ git clone https://github.com/neemiasbsilva/MLLMsent-framework.git
+$ cd MLLMsent-framework
 
 # Create checkpoints directory and download model weights
 $ mkdir checkpoints
