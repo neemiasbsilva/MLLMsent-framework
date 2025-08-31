@@ -1,4 +1,4 @@
-# Do Multimoda LLM See SentimentsPerceptSent-LLM Approach
+# Do Multimodal LLMs See Sentiment?
 
 ![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=for-the-badge&logo=PyTorch&logoColor=white)
 ![Transformers](https://img.shields.io/badge/Transformers-%23FF6F00.svg?style=for-the-badge&logo=huggingface&logoColor=white)
@@ -13,7 +13,7 @@
 
 ## Overview
 
-**PerceptSent-LLM** is a research framework for investigating sentiment reasoning in MultiModal Large Language Models (MLLMs). It provides end-to-end tools for sentiment analysis from visual content, focusing on how images communicate sentiment through complex, scene-level semantics.
+**MLLMsent** is a research framework for investigating sentiment reasoning in MultiModal Large Language Models (MLLMs). It provides end-to-end tools for sentiment analysis from visual content, focusing on how images communicate sentiment through complex, scene-level semantics.
 
 - **Direct sentiment classification** from images using MLLMs
 - **Sentiment analysis on MLLM-generated captions** using pre-trained LLMs (with only the final classification layer trained)
