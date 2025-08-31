@@ -1,4 +1,4 @@
-# PerceptSent-LLM Approach
+# Do Multimoda LLM See SentimentsPerceptSent-LLM Approach
 
 ![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=for-the-badge&logo=PyTorch&logoColor=white)
 ![Transformers](https://img.shields.io/badge/Transformers-%23FF6F00.svg?style=for-the-badge&logo=huggingface&logoColor=white)
@@ -20,6 +20,17 @@
 - **Full fine-tuning** of LLMs on sentiment-labeled captions
 
 The framework supports multiple transformer architectures (ModernBERT, BART, LLaMA, DistilBERT, Swin Transformer) and both fine-tuning and non-fine-tuning experiments. It achieves state-of-the-art performance, outperforming CNN/Transformer baselines by up to 15% across sentiment categories.
+
+
+## Publication
+
+Our article can be found on ... . A [preprint](https://arxiv.org/abs/2508.16873) is publicly available on arXiv as well. You can also find it indexed on gitxiv.
+
+Please cite with the following Bibtex code:
+
+```
+TODO
+```
 
 ### Key Features
 - End-to-end pipeline for sentiment analysis with LLMs
@@ -192,15 +203,6 @@ python scripts/inference.py \
 
 Contributions are welcome! Please open an issue or submit a pull request. For major changes, please open an issue first to discuss what you would like to change.
 
----
-
-## Citation
-
-If you use this repository in your research, please cite:
-
-```
-[Add citation information here]
-```
 
 ---
 
