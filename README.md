@@ -55,9 +55,8 @@ These weights include fine-tuned models for sentiment analysis across different 
 
 This research framework utilizes two key datasets for training and evaluation:
 
-**Image Dataset**: [PerceptSent](https://drive.google.com/drive/folders/1JXCVETaUqOEpWne62tT3LFzzNmuOSac2?usp=share_link) - A comprehensive collection of images annotated with sentiment labels, designed for multimodal sentiment analysis research. This dataset enables direct sentiment classification from visual content using MLLMs.
-
-**Text Dataset Transcripts**: [MLLMsent-dataset](https://drive.google.com/drive/folders/1LQAOGI2ojzE5ykjr5WbtDJFM1PQWF9On?usp=share_link) - Contains sentiment-labeled text transcripts and captions generated from the image dataset. This dataset supports fine-tuning experiments and sentiment analysis on MLLM-generated captions using pre-trained language models.
+- **Image Dataset**: [PerceptSent](https://drive.google.com/drive/folders/1JXCVETaUqOEpWne62tT3LFzzNmuOSac2?usp=share_link) - A comprehensive collection of images annotated with sentiment labels, designed for multimodal sentiment analysis research. This dataset enables direct sentiment classification from visual content using MLLMs.
+- **Text Dataset Transcripts**: [MLLMsent-dataset](https://drive.google.com/drive/folders/1LQAOGI2ojzE5ykjr5WbtDJFM1PQWF9On?usp=share_link) - Contains sentiment-labeled text transcripts and captions generated from the image dataset. This dataset supports fine-tuning experiments and sentiment analysis on MLLM-generated captions using pre-trained language models.
 
 Both datasets are essential for the end-to-end sentiment analysis pipeline, supporting both direct image classification and caption-based analysis approaches.
 
