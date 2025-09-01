@@ -45,7 +45,7 @@ TODO
 ## Model Weights and Pre-trained Models
 
 The framework requires pre-trained model weights for various architectures. Download the compressed model files from:
-**Model Weights**: https://drive.google.com/drive/u/0/folders/1eumPYLgpk7Gr71lG0j6MtgTpnfbhiBr9
+**Model Weights**: [checkpoints](https://drive.google.com/drive/u/0/folders/1eumPYLgpk7Gr71lG0j6MtgTpnfbhiBr9)
 
 These weights include fine-tuned models for sentiment analysis across different architectures (BART, ModernBERT, LLaMA, etc.) and training strategies.
 
