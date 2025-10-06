@@ -87,7 +87,7 @@ class Llama3:
             device_map="auto",
             quantization_config=bnb_config,
             trust_remote_code=True,
-            cache_dir="/mnt/raid5/neemias/cache-dir"
+            # cache_dir="/mnt/raid5/neemias/cache-dir"
         )
 
         self.model.config.use_cache = False
@@ -96,7 +96,7 @@ class Llama3:
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_name,
             trust_remote_code=True,
-            cache_dir="/mnt/raid5/neemias/cache-dir"
+            # cache_dir="/mnt/raid5/neemias/cache-dir"
         )
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.tokenizer.padding_side = "right"
