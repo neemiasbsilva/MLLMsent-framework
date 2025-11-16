@@ -12,6 +12,10 @@
 ---
 
 ## Overview
+<p align="center">
+<img src="reports/mllm-framework.png" width="40%" height="40%">
+<h6 align="center"> Architecture diagram of MLLMsent, our proposed Multimodal Large Language Model
+framework for sentiment analysis..</h6>
 
 **MLLMsent** is a research framework for investigating sentiment reasoning in MultiModal Large Language Models (MLLMs). It provides end-to-end tools for sentiment analysis from visual content, focusing on how images communicate sentiment through complex, scene-level semantics.
 
