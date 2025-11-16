@@ -1,4 +1,4 @@
-# PerceptSent-LLM Approach
+# Do Multimodal LLMs See Sentiment?
 
 ![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=for-the-badge&logo=PyTorch&logoColor=white)
 ![Transformers](https://img.shields.io/badge/Transformers-%23FF6F00.svg?style=for-the-badge&logo=huggingface&logoColor=white)
@@ -13,13 +13,24 @@
 
 ## Overview
 
-**PerceptSent-LLM** is a research framework for investigating sentiment reasoning in MultiModal Large Language Models (MLLMs). It provides end-to-end tools for sentiment analysis from visual content, focusing on how images communicate sentiment through complex, scene-level semantics.
+**MLLMsent** is a research framework for investigating sentiment reasoning in MultiModal Large Language Models (MLLMs). It provides end-to-end tools for sentiment analysis from visual content, focusing on how images communicate sentiment through complex, scene-level semantics.
 
 - **Direct sentiment classification** from images using MLLMs
 - **Sentiment analysis on MLLM-generated captions** using pre-trained LLMs (with only the final classification layer trained)
 - **Full fine-tuning** of LLMs on sentiment-labeled captions
 
 The framework supports multiple transformer architectures (ModernBERT, BART, LLaMA, DistilBERT, Swin Transformer) and both fine-tuning and non-fine-tuning experiments. It achieves state-of-the-art performance, outperforming CNN/Transformer baselines by up to 15% across sentiment categories.
+
+
+## Publication
+
+Our article can be found on ... . A [preprint](https://arxiv.org/abs/2508.16873) is publicly available on arXiv as well. You can also find it indexed on gitxiv.
+
+Please cite with the following Bibtex code:
+
+```
+TODO
+```
 
 ### Key Features
 - End-to-end pipeline for sentiment analysis with LLMs
@@ -31,12 +42,32 @@ The framework supports multiple transformer architectures (ModernBERT, BART, LLa
 
 ---
 
+## Model Weights and Pre-trained Models
+
+The framework requires pre-trained model weights for various architectures. Download the compressed model files from:
+**Model Weights**: [checkpoints](https://drive.google.com/drive/u/0/folders/1eumPYLgpk7Gr71lG0j6MtgTpnfbhiBr9)
+
+These weights include fine-tuned models for sentiment analysis across different architectures (BART, ModernBERT, LLaMA, etc.) and training strategies.
+
+---
+
+## Dataset Resources
+
+This research framework utilizes two key datasets for training and evaluation:
+
+- **Image Dataset**: [PerceptSent](https://drive.google.com/drive/folders/1JXCVETaUqOEpWne62tT3LFzzNmuOSac2?usp=share_link) - A comprehensive collection of images annotated with sentiment labels, designed for multimodal sentiment analysis research. This dataset enables direct sentiment classification from visual content using MLLMs.
+- **Text Dataset Transcripts**: [MLLMsent-dataset](https://drive.google.com/drive/folders/1LQAOGI2ojzE5ykjr5WbtDJFM1PQWF9On?usp=share_link) - Contains sentiment-labeled text transcripts and captions generated from the image dataset. This dataset supports fine-tuning experiments and sentiment analysis on MLLM-generated captions using pre-trained language models.
+
+Both datasets are essential for the end-to-end sentiment analysis pipeline, supporting both direct image classification and caption-based analysis approaches.
+
+---
+
 ## Quickstart
 
 ```bash
 # Clone the repository
-$ git clone https://github.com/neemiasbsilva/PerceptSent-LLM-approach.git
-$ cd PerceptSent-LLM-approach
+$ git clone https://github.com/neemiasbsilva/MLLMsent-framework.git
+$ cd MLLMsent-framework
 
 # Create checkpoints directory and download model weights
 $ mkdir checkpoints
@@ -44,6 +75,8 @@ $ mkdir checkpoints
 # https://drive.google.com/drive/u/0/folders/1eumPYLgpk7Gr71lG0j6MtgTpnfbhiBr9
 # Extract with:
 $ gunzip checkpoints/*.pt.gz
+
+# The text dataset transcript can be find here: https://drive.google.com/drive/folders/1LQAOGI2ojzE5ykjr5WbtDJFM1PQWF9On?usp=share_link
 
 # Install dependencies (Python >=3.10 required)
 $ pip install -r requirements.txt
@@ -192,15 +225,6 @@ python scripts/inference.py \
 
 Contributions are welcome! Please open an issue or submit a pull request. For major changes, please open an issue first to discuss what you would like to change.
 
----
-
-## Citation
-
-If you use this repository in your research, please cite:
-
-```
-[Add citation information here]
-```
 
 ---
 

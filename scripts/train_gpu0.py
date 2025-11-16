@@ -194,7 +194,7 @@ def fit(
     patience = 10
     if log_dir.split('/')[0] == "experiments-not-finetuning":
         print("Backbone freeze")
-        patience = 50
+        patience = 25
         freeze_backbone(model)
     # Set random seeds for reproducibility
     torch.manual_seed(42)
@@ -364,7 +364,11 @@ def train(config, config_path):
             )
 
             df_metrics, y_pred, y_true, f1_val = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device, start_time)
+<<<<<<< HEAD
             fine_tuning = "finetuned" if log_dir.split('/')[0] == "experiments-finetuning" else "not_finetuned"
+=======
+            fine_tuning = "finetuned" if log_dir.split('/')[0] != "experiments-not-finetuning" else "not_finetuned"
+>>>>>>> e0be7cb034983cf944bf348b84676df09ba4f0ca
             name_arch = dataset_type+"_distilbert"
 
             if f1_val > best_f1:
@@ -456,7 +460,11 @@ def train(config, config_path):
             )
 
             df_metrics, y_pred, y_true, f1_val = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device, start_time)
+<<<<<<< HEAD
             fine_tuning = "finetuned" if log_dir.split('/')[0] == "experiments-finetuning" else "not_finetuned"
+=======
+            fine_tuning = "finetuned" if log_dir.split('/')[0] != "experiments-not-finetuning" else "not_finetuned"
+>>>>>>> e0be7cb034983cf944bf348b84676df09ba4f0ca
             name_arch = dataset_type+"_modernbert"
 
             if f1_val > best_f1:
@@ -734,7 +742,7 @@ def train(config, config_path):
             )
 
             df_metrics, y_pred, y_true, f1_val = val(log_dir, model, val_dl, loss_fn, fold, df_metrics, model_name, device, start_time)
-            fine_tuning = "finetuned" if log_dir.split('/')[0] else "not_finetuned"
+            fine_tuning = "finetuned" if log_dir.split('/')[0] != "experiments-not-finetuning" else "not_finetuned"
             name_arch = dataset_type+"_bart"
 
             if f1_val > best_f1:
